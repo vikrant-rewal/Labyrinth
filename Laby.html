@@ -3,13 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Hard Wood Labyrinth</title>
+    <title>Pro Wood Labyrinth</title>
     <style>
+        :root {
+            --wood-dark: #3e2723;
+            --wood-light: #8d6e63;
+            --felt-green: #2e7d32;
+            --steel: #b0bec5;
+        }
+
         body {
             margin: 0;
             overflow: hidden;
             background-color: #1a1005;
-            font-family: 'Courier New', Courier, monospace;
+            font-family: 'Helvetica Neue', sans-serif;
             touch-action: none;
             user-select: none;
             -webkit-user-select: none;
@@ -18,515 +25,583 @@
         #gameCanvas {
             display: block;
             margin: 0 auto;
+            /* Box shadow for board depth */
+            box-shadow: 0 0 50px rgba(0,0,0,0.8);
         }
 
-        /* UI Overlays */
+        /* UI OVERLAYS */
         .overlay {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            top: 0; left: 0; width: 100%; height: 100%;
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            background: rgba(26, 16, 5, 0.95);
+            background: rgba(20, 10, 5, 0.92);
             color: #e3c099;
-            z-index: 10;
-            text-align: center;
-            transition: opacity 0.3s;
+            z-index: 20;
+            transition: opacity 0.4s ease;
+            backdrop-filter: blur(5px);
         }
 
         h1 {
-            font-size: 2rem;
+            font-size: 2.5rem;
             text-transform: uppercase;
-            letter-spacing: 2px;
+            letter-spacing: 4px;
             color: #d4a76a;
-            text-shadow: 2px 2px #000;
+            margin-bottom: 0.5rem;
+            text-shadow: 0 4px 10px rgba(0,0,0,0.5);
         }
 
-        p { margin: 10px 20px; color: #aaa; }
+        p {
+            font-size: 1rem;
+            color: #a1887f;
+            margin-bottom: 2rem;
+            max-width: 80%;
+            text-align: center;
+            line-height: 1.5;
+        }
 
         button {
-            padding: 15px 40px;
-            font-size: 1.2rem;
-            background: #d4a76a;
+            padding: 16px 48px;
+            font-size: 1.1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            background: linear-gradient(to bottom, #d4a76a, #a67c52);
             color: #2b1d0e;
-            border: none;
-            border-radius: 4px;
-            font-weight: bold;
+            border: 1px solid #754c24;
+            border-radius: 30px;
+            font-weight: 800;
             cursor: pointer;
-            margin-top: 30px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            box-shadow: 0 6px 0 #5d4037, 0 15px 20px rgba(0,0,0,0.4);
+            transition: transform 0.1s, box-shadow 0.1s;
         }
-        
-        button:active { transform: scale(0.98); background: #b08d55; }
+
+        button:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 #5d4037, 0 5px 10px rgba(0,0,0,0.4);
+        }
 
         #hud {
             position: absolute;
             top: 20px;
             width: 100%;
             text-align: center;
-            color: #5d4037;
-            font-weight: 900;
-            font-size: 1.5rem;
-            text-shadow: 0px 1px 0px rgba(255,255,255,0.3);
             pointer-events: none;
-            z-index: 5;
+            z-index: 10;
         }
 
-        .hidden { display: none !important; }
+        #timerBadge {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 8px 16px;
+            border-radius: 20px;
+            color: #fff;
+            font-weight: 700;
+            font-size: 1.2rem;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .hidden { 
+            opacity: 0; 
+            pointer-events: none; 
+        }
     </style>
 </head>
 <body>
 
-    <div id="hud"><span id="timerDisplay">00:00</span></div>
+    <div id="hud"><span id="timerBadge">00:00</span></div>
 
     <div id="startScreen" class="overlay">
-        <h1>Labyrinth<br>Master</h1>
-        <p>Guide 4 balls to the center.</p>
-        <p style="font-size:0.8em; color:#888;">Device Motion Required<br>(Lock Orientation)</p>
-        <button id="btnStart">START</button>
+        <h1>Labyrinth</h1>
+        <p>Hold your device flat.<br>Tilt gently to guide 4 steel balls to the center.</p>
+        <button id="btnStart">Unlock & Play</button>
     </div>
 
     <div id="winScreen" class="overlay hidden">
-        <h1>Completed</h1>
-        <p>Time: <span id="finalTime"></span></p>
-        <button id="btnRestart">RETRY</button>
+        <h1 style="color:#81c784">Success</h1>
+        <p>All balls secured in <span id="finalTime" style="color:white; font-weight:bold;"></span></p>
+        <button id="btnRestart">Play Again</button>
     </div>
 
     <canvas id="gameCanvas"></canvas>
 
 <script>
-// --- CONFIGURATION ---
-const RINGS = 8; // Density of the maze (High = Harder)
-const BALL_COUNT = 4;
-const WALL_THICKNESS = 6;
-const FRICTION = 0.98;
-const SENSITIVITY = 0.35; // Lower sensitivity for precision
+/**
+ * --- PHYSICS CONFIGURATION ---
+ * Adjust these to tune the "Feel" of the game
+ */
+const CONFIG = {
+    RINGS: 7,               // Number of concentric walls
+    BALL_COUNT: 4,          
+    WALL_WIDTH: 14,         // Thickness of walls (pixels)
+    BALL_RADIUS: 8,         // Radius of ball (pixels)
+    FRICTION: 0.96,         // Air resistance (Lower = slide more)
+    ELASTICITY: 0.4,        // Bounciness (0 = no bounce, 1 = super ball)
+    TILT_SENSITIVITY: 0.04, // How much tilt affects force
+    SUB_STEPS: 8,           // Physics steps per frame (Higher = Anti-tunneling)
+    INPUT_SMOOTHING: 0.15   // Low pass filter for accelerometer (0.1 = very smooth/laggy, 1.0 = raw)
+};
 
-// --- GLOBALS ---
+// --- SYSTEM GLOBALS ---
 const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+const ctx = canvas.getContext('2d', { alpha: false }); // Optimize rendering
 let width, height, centerX, centerY, maxRadius;
-let channelWidth; // Width of path between rings
 
-let isPlaying = false;
-let startTime = 0;
-let animationFrameId;
+let gameState = {
+    playing: false,
+    won: false,
+    startTime: 0,
+    timeStr: "00:00"
+};
 
-// Game Objects
+// Physics Inputs
+let input = { x: 0, y: 0 }; // Smoothed input
+let targetInput = { x: 0, y: 0 }; // Raw input
+
+// Entities
 let balls = [];
-let mazeWalls = []; // Array of wall segments
-let gx = 0, gy = 0; // Gravity
+let walls = [];
 
-// --- MAZE GENERATION (Polar Grid) ---
-function generateMaze() {
-    mazeWalls = [];
-    
-    // We will generate walls as "Arc Segments" and "Radial Segments"
-    // To make it hard but solvable, we use a simple approach:
-    // 1. Concentric rings with 1 random gap (the "door")
-    // 2. Radial barriers randomly placed to block the direct path to the door
-    // This forces winding/rotational movement.
+/**
+ * --- MATH HELPERS ---
+ */
+const PI2 = Math.PI * 2;
 
-    const ringStep = (maxRadius * 0.85) / RINGS;
-    channelWidth = ringStep;
-
-    for (let r = 1; r <= RINGS; r++) {
-        const radius = r * ringStep;
-        
-        // 1. Create the Ring Wall (Circular)
-        // Calculate a random gap size and position
-        const gapSize = 0.5 + (Math.random() * 0.5); // Radians width
-        const gapPos = Math.random() * Math.PI * 2;
-        
-        // Push the main ring wall (from gapEnd around to gapStart)
-        mazeWalls.push({
-            type: 'arc',
-            radius: radius,
-            start: gapPos + gapSize/2,
-            end: gapPos + (Math.PI*2) - gapSize/2
-        });
-
-        // 2. Create Radial Barriers (Dead ends)
-        // Add random walls strictly BETWEEN this ring and the previous ring
-        if (r > 1) {
-            const innerRadius = (r-1) * ringStep;
-            const outerRadius = radius;
-            const numBarriers = 2 + Math.floor(Math.random() * 3); // 2 to 5 barriers per ring
-            
-            for(let b=0; b<numBarriers; b++) {
-                const angle = Math.random() * Math.PI * 2;
-                // Ensure barrier doesn't block the gap we just made (simple check)
-                if (Math.abs(angle - gapPos) > 0.5) {
-                    mazeWalls.push({
-                        type: 'radial',
-                        angle: angle,
-                        innerR: innerRadius,
-                        outerR: outerRadius
-                    });
-                }
-            }
-        }
-    }
+function distSq(x1, y1, x2, y2) { return (x1-x2)**2 + (y1-y2)**2; }
+function normalizeAngle(a) { 
+    a = a % PI2;
+    return a < 0 ? a + PI2 : a;
 }
 
-// --- PHYSICS ENGINE ---
-class Ball {
-    constructor() {
-        // Spawn randomly in the outer-most channel
-        const spawnAngle = Math.random() * Math.PI * 2;
-        const r = (maxRadius * 0.85) - (channelWidth/2); 
-        this.x = centerX + Math.cos(spawnAngle) * r;
-        this.y = centerY + Math.sin(spawnAngle) * r;
-        this.vx = 0;
-        this.vy = 0;
-        this.radius = channelWidth * 0.35; // Ball fits in channel
-        this.color = '#bdc3c7';
-    }
-
-    update() {
-        // Gravity
-        this.vx += gx * SENSITIVITY;
-        this.vy += gy * SENSITIVITY;
-        
-        // Friction
-        this.vx *= FRICTION;
-        this.vy *= FRICTION;
-
-        // Candidate Position
-        let nextX = this.x + this.vx;
-        let nextY = this.y + this.vy;
-
-        // 1. Collision with Canvas Bounds
-        const distFromCenter = Math.hypot(nextX - centerX, nextY - centerY);
-        if (distFromCenter > maxRadius * 0.95) {
-            // Bounce off outer rim
-            const angle = Math.atan2(nextY - centerY, nextX - centerX);
-            nextX = centerX + Math.cos(angle) * (maxRadius * 0.95);
-            nextY = centerY + Math.sin(angle) * (maxRadius * 0.95);
-            // Reflect velocity roughly
-            this.vx *= -0.5; 
-            this.vy *= -0.5;
-        }
-
-        // 2. Collision with Maze Walls
-        // We check against all walls. Optimized slightly by type.
-        let hasCollided = false;
-
-        for (let wall of mazeWalls) {
-            if (wall.type === 'arc') {
-                // Check distance to ring center
-                const d = Math.hypot(nextX - centerX, nextY - centerY);
-                const dr = Math.abs(d - wall.radius);
-                
-                // If touching the ring thickness
-                if (dr < this.radius + (WALL_THICKNESS/2)) {
-                    // Check angle to see if we are in the solid part (not the gap)
-                    let angle = Math.atan2(nextY - centerY, nextX - centerX);
-                    if (angle < 0) angle += Math.PI * 2;
-                    
-                    // Normalize wall angles to 0-2PI for comparison
-                    let start = wall.start % (Math.PI*2);
-                    let end = wall.end % (Math.PI*2); // Actually wall.start + length
-                    
-                    // Arc collision logic is tricky with wrapping. 
-                    // Simplified: Check if angle is INSIDE the arc drawing range.
-                    // The arc is drawn from start -> end.
-                    
-                    // Helper: is angle between start and start+length?
-                    // We store "gap" logic usually, but here we stored the wall segment.
-                    // Let's rely on the visual draw logic: 
-                    // To handle wrapping, we just check: is the angle NOT in the gap?
-                    
-                    // Actually, simpler math: The gap was defined as center `gapPos` with size `gapSize`.
-                    // We can re-calculate that from the wall object implicitly or just check arc distance.
-                    // Let's use simple Point-to-Arc distance.
-                    
-                    // Project point onto the circle
-                    const projX = centerX + Math.cos(angle) * wall.radius;
-                    const projY = centerY + Math.sin(angle) * wall.radius;
-                    
-                    // Distance from ball to that point on the circle
-                    const distToWallPoint = Math.hypot(nextX - projX, nextY - projY);
-                    
-                    if (distToWallPoint < this.radius + (WALL_THICKNESS/2)) {
-                        // We are hitting the circle, but are we hitting the drawn line?
-                        // We need to check if 'angle' is within the drawn segment.
-                        // Since wrapping math is annoying, let's use the Gap Logic reversed.
-                        // The wall exists everywhere EXCEPT the gap.
-                        
-                        // Recover gap approx (the empty space in the circle)
-                        // It's safer to just check "Is this point on the wall?"
-                        // A point is on the wall if it's NOT in the gap.
-                        
-                        // Let's use a robust "Angle Distance"
-                        // wall.start is start of wall, wall.end is end of wall (CCW)
-                        // We need to normalize everything to 0...2PI
-                        
-                        let normAngle = angle;
-                        let normStart = wall.start % (Math.PI*2);
-                        if(normStart < 0) normStart += Math.PI*2;
-                        
-                        // Length of wall
-                        let length = (wall.end - wall.start);
-                        // Normalize angle relative to start
-                        let relAngle = normAngle - normStart;
-                        if (relAngle < 0) relAngle += Math.PI*2;
-                        
-                        // If relative angle is within length, we hit the wall
-                        if (relAngle < length) {
-                            // COLLISION
-                            // Push back along radius
-                            const pushDir = d < wall.radius ? -1 : 1; // In or Out
-                            const overlap = (this.radius + WALL_THICKNESS/2) - dr;
-                            
-                            // Apply push
-                            nextX -= Math.cos(angle) * overlap * pushDir;
-                            nextY -= Math.sin(angle) * overlap * pushDir;
-                            
-                            // Reflect Velocity (Normal is radial)
-                            // V' = V - 2(V.N)N
-                            const nx = Math.cos(angle);
-                            const ny = Math.sin(angle);
-                            const dot = this.vx * nx + this.vy * ny;
-                            this.vx -= 2 * dot * nx;
-                            this.vy -= 2 * dot * ny;
-                            
-                            // Dampen
-                            this.vx *= 0.5;
-                            this.vy *= 0.5;
-                        }
-                    }
-                }
-            }
-            else if (wall.type === 'radial') {
-                // Line Segment Collision
-                // Barrier is a line from innerR to outerR at specific angle
-                // Normal is perpendicular to angle
-                
-                // 1. Check if we are close to the infinite line of the barrier
-                // Distance from point to line defined by angle
-                // Line direction: (cos(a), sin(a))
-                // Normal direction: (-sin(a), cos(a))
-                
-                const nx = -Math.sin(wall.angle);
-                const ny = Math.cos(wall.angle);
-                
-                // Project ball pos onto normal
-                const distToLine = (nextX - centerX) * nx + (nextY - centerY) * ny;
-                
-                if (Math.abs(distToLine) < this.radius + (WALL_THICKNESS/2)) {
-                    // 2. Check if we are within the radial segment (innerR to outerR)
-                    // Project ball onto the radial vector
-                    const radialDist = (nextX - centerX) * Math.cos(wall.angle) + (nextY - centerY) * Math.sin(wall.angle);
-                    
-                    if (radialDist >= wall.innerR - this.radius && radialDist <= wall.outerR + this.radius) {
-                        // Collision!
-                        // Push back along normal
-                        const overlap = (this.radius + WALL_THICKNESS/2) - Math.abs(distToLine);
-                        const pushDir = distToLine > 0 ? 1 : -1;
-                        
-                        nextX += nx * overlap * pushDir;
-                        nextY += ny * overlap * pushDir;
-                        
-                        // Reflect
-                        // Normal is (nx, ny)
-                        const dot = this.vx * nx + this.vy * ny;
-                        this.vx -= 2 * dot * nx;
-                        this.vy -= 2 * dot * ny;
-                        this.vx *= 0.5;
-                        this.vy *= 0.5;
-                    }
-                }
-            }
-        }
-
-        this.x = nextX;
-        this.y = nextY;
-    }
-
-    draw() {
-        ctx.beginPath();
-        // Shadow
-        ctx.arc(this.x+2, this.y+2, this.radius, 0, Math.PI*2);
-        ctx.fillStyle = 'rgba(0,0,0,0.3)';
-        ctx.fill();
-        // Ball
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2);
-        const grad = ctx.createRadialGradient(this.x-this.radius/3, this.y-this.radius/3, this.radius/4, this.x, this.y, this.radius);
-        grad.addColorStop(0, '#fff');
-        grad.addColorStop(1, '#666');
-        ctx.fillStyle = grad;
-        ctx.fill();
-    }
-}
-
-// --- CORE FUNCTIONS ---
-
+/**
+ * --- INITIALIZATION & MAZE GENERATION ---
+ */
 function init() {
     resize();
     window.addEventListener('resize', resize);
     
-    document.getElementById('btnStart').addEventListener('click', () => {
-        // iOS Permission
-        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-            DeviceOrientationEvent.requestPermission()
-                .then(r => {
-                    if (r === 'granted') startGame();
-                    else alert("Permission needed for tilt controls.");
-                })
-                .catch(console.error);
-        } else {
-            startGame();
-        }
-    });
-
+    // Controls
+    document.getElementById('btnStart').addEventListener('click', requestPermissions);
     document.getElementById('btnRestart').addEventListener('click', startGame);
 
-    // Orientation Handler
-    window.addEventListener('deviceorientation', (e) => {
-        if (!isPlaying) return;
-        // Basic Landscape/Portrait logic
-        let x = e.gamma; // L/R
-        let y = e.beta;  // F/B
-        
-        // Clamp
-        if (x > 90) x = 90; if (x < -90) x = -90;
-        if (y > 90) y = 90; if (y < -90) y = -90;
-        
-        gx = x;
-        gy = y;
-    });
+    // Orientation
+    window.addEventListener('deviceorientation', handleOrientation);
+
+    // Start Loop
+    requestAnimationFrame(loop);
 }
 
 function resize() {
-    width = window.innerWidth;
+    width = Math.min(window.innerWidth, 800); // Max width constraint
     height = window.innerHeight;
     canvas.width = width;
     canvas.height = height;
-    centerX = width/2;
-    centerY = height/2;
+    centerX = width / 2;
+    centerY = height / 2;
     maxRadius = Math.min(width, height) * 0.45;
+}
+
+function generateLevel() {
+    walls = [];
+    const step = maxRadius / (CONFIG.RINGS + 1);
+
+    // Generate Concentric Rings with Openings
+    for (let i = 1; i <= CONFIG.RINGS; i++) {
+        const r = i * step;
+        
+        // Random Gap
+        // Gap size gets slightly larger as we go out
+        const gapSizeDeg = 45 + (Math.random() * 30); 
+        const gapSizeRad = (gapSizeDeg * Math.PI) / 180;
+        const gapAngle = Math.random() * PI2;
+
+        // We define a wall as an ARC that goes from A to B.
+        // To make a ring with a gap, the wall goes from (GapEnd) around to (GapStart)
+        const start = gapAngle + gapSizeRad/2;
+        const end = gapAngle + PI2 - gapSizeRad/2;
+
+        walls.push({
+            type: 'arc',
+            radius: r,
+            startAngle: start, // Normalized in physics loop
+            endAngle: end,
+            width: CONFIG.WALL_WIDTH
+        });
+    }
+
+    // Outer Boundary Ring (Solid)
+    walls.push({
+        type: 'arc',
+        radius: maxRadius,
+        startAngle: 0,
+        endAngle: PI2 + 0.1, // Full circle
+        width: CONFIG.WALL_WIDTH * 2 // Thicker boundary
+    });
+}
+
+function spawnBalls() {
+    balls = [];
+    // Spawn balls in the outermost channel, spread out
+    const spawnR = maxRadius * 0.85;
+    for(let i=0; i<CONFIG.BALL_COUNT; i++) {
+        const angle = (i / CONFIG.BALL_COUNT) * PI2 + 0.5; // Offset slightly
+        balls.push({
+            x: centerX + Math.cos(angle) * spawnR,
+            y: centerY + Math.sin(angle) * spawnR,
+            vx: 0, vy: 0,
+            radius: CONFIG.BALL_RADIUS
+        });
+    }
 }
 
 function startGame() {
     document.getElementById('startScreen').classList.add('hidden');
     document.getElementById('winScreen').classList.add('hidden');
     
-    // Reset
     resize();
-    generateMaze();
-    balls = [];
-    for(let i=0; i<BALL_COUNT; i++) balls.push(new Ball());
+    generateLevel();
+    spawnBalls();
     
-    isPlaying = true;
-    startTime = Date.now();
-    gx = 0; gy = 0;
+    gameState.playing = true;
+    gameState.won = false;
+    gameState.startTime = Date.now();
     
-    if (animationFrameId) cancelAnimationFrame(animationFrameId);
-    loop();
+    // Reset inputs
+    input = {x:0, y:0};
+    targetInput = {x:0, y:0};
 }
 
-function drawWoodBackground() {
-    // Solid wood color
-    ctx.fillStyle = '#eecfa1'; 
-    ctx.fillRect(0, 0, width, height);
+/**
+ * --- PHYSICS ENGINE (SUB-STEPPED) ---
+ */
+function handleOrientation(e) {
+    if(!gameState.playing) return;
+    
+    // Gamma: Left/Right (-90 to 90)
+    // Beta: Front/Back (-180 to 180)
+    
+    // Clamp values to avoid extreme flips
+    const x = Math.min(Math.max(e.gamma, -45), 45); 
+    const y = Math.min(Math.max(e.beta, -45), 45);
+    
+    targetInput.x = x;
+    targetInput.y = y;
+}
 
-    // Wood Grain rings
-    ctx.strokeStyle = 'rgba(160, 120, 80, 0.15)';
-    ctx.lineWidth = 4;
-    for (let r=0; r<maxRadius*2; r+=15) {
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, r + (Math.random()*5), 0, Math.PI*2);
-        ctx.stroke();
+function updatePhysics() {
+    if(!gameState.playing) return;
+
+    // 1. Smooth Input (Low Pass Filter)
+    input.x += (targetInput.x - input.x) * CONFIG.INPUT_SMOOTHING;
+    input.y += (targetInput.y - input.y) * CONFIG.INPUT_SMOOTHING;
+
+    // Calculate Gravity Force based on tilt
+    const gx = input.x * CONFIG.TILT_SENSITIVITY;
+    const gy = input.y * CONFIG.TILT_SENSITIVITY;
+
+    // 2. Sub-Stepping Loop
+    // This runs physics N times per frame to catch collisions at high speeds
+    for(let step=0; step<CONFIG.SUB_STEPS; step++) {
+        
+        balls.forEach(b => {
+            // Apply Forces
+            b.vx += gx;
+            b.vy += gy;
+            
+            // Friction
+            b.vx *= CONFIG.FRICTION;
+            b.vy *= CONFIG.FRICTION;
+
+            // Tentative Movement
+            b.x += b.vx;
+            b.y += b.vy;
+
+            // Solve Constraints
+            solveCollisions(b);
+        });
     }
+
+    // 3. Win Condition Check
+    checkWin();
+}
+
+function solveCollisions(b) {
+    // We only resolve Wall collisions here. 
+    // Ball-to-Ball collision is omitted to keep game "clean" and focused on maze solving.
+
+    walls.forEach(w => {
+        // Distance from center
+        const dx = b.x - centerX;
+        const dy = b.y - centerY;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        
+        // 1. Broad Phase: Is ball close to the Ring's radius?
+        const halfWall = w.width / 2;
+        const ballR = b.radius;
+        
+        if (dist >= w.radius - halfWall - ballR && dist <= w.radius + halfWall + ballR) {
+            
+            // 2. Narrow Phase: Angle Check
+            let angle = Math.atan2(dy, dx);
+            if (angle < 0) angle += PI2; // Normalize 0 to 2PI
+
+            // Check if this angle is within the wall's arc
+            // We need to handle the wrapping case (e.g. wall goes from 350deg to 10deg)
+            let inWall = false;
+            
+            // Normalize wall start/end to 0-2PI
+            const start = normalizeAngle(w.startAngle);
+            const end = normalizeAngle(w.endAngle);
+
+            if (start < end) {
+                // Normal case
+                if (angle >= start && angle <= end) inWall = true;
+            } else {
+                // Wrapping case
+                if (angle >= start || angle <= end) inWall = true;
+            }
+
+            if (inWall) {
+                // COLLISION WITH FACE OF WALL
+                // Push ball out along the Normal (Radial Vector)
+                // Determine which side of the wall is closer
+                const distToInner = Math.abs(dist - (w.radius - halfWall));
+                const distToOuter = Math.abs(dist - (w.radius + halfWall));
+                
+                // Normal vector (normalized)
+                const nx = dx / dist;
+                const ny = dy / dist;
+
+                if (dist < w.radius) {
+                    // Inside the ring, push inwards towards center
+                    // Wait, if dist < radius, we are on the inner side. Push IN? 
+                    // No, push OUT of the wall geometry.
+                    // If ball is at radius 90, and wall inner edge is 95. Push to 90.
+                    
+                    const pen = (w.radius - halfWall - ballR) - dist;
+                    // Actually simpler: Push towards center if closer to inner, away if closer to outer?
+                    // No, just push away from the wall core.
+                    
+                    // If dist < w.radius, we are "inside" the ring physically.
+                    // Push vector is -Normal.
+                    const overlap = (ballR + halfWall) - Math.abs(dist - w.radius);
+                    
+                    // Direction: Are we closer to inner or outer edge?
+                    if (dist < w.radius) {
+                        // Push Inwards (decrease radius)
+                        b.x -= nx * overlap;
+                        b.y -= ny * overlap;
+                        reflect(b, nx, ny);
+                    } else {
+                        // Push Outwards (increase radius)
+                        b.x += nx * overlap;
+                        b.y += ny * overlap;
+                        reflect(b, -nx, -ny);
+                    }
+                }
+            } else {
+                // COLLISION WITH END CAPS (The "Tips" of the wall at the gap)
+                // We check collision against two circles placed at start and end of arc
+                checkCapCollision(b, w.radius, w.startAngle);
+                checkCapCollision(b, w.radius, w.endAngle);
+            }
+        }
+    });
+}
+
+function checkCapCollision(b, r, angle) {
+    // Calculate position of the wall tip
+    const capX = centerX + Math.cos(angle) * r;
+    const capY = centerY + Math.sin(angle) * r;
+    
+    // Determine distance from ball to Tip
+    const distSq = (b.x - capX)**2 + (b.y - capY)**2;
+    const minDist = CONFIG.WALL_WIDTH/2 + b.radius;
+    
+    if (distSq < minDist**2) {
+        const dist = Math.sqrt(distSq);
+        // Normal vector from Cap to Ball
+        const nx = (b.x - capX) / dist;
+        const ny = (b.y - capY) / dist;
+        
+        const overlap = minDist - dist;
+        
+        // Push ball away
+        b.x += nx * overlap;
+        b.y += ny * overlap;
+        
+        reflect(b, nx, ny);
+    }
+}
+
+function reflect(b, nx, ny) {
+    // Reflect velocity vector V around Normal N
+    // V_new = V - 2(V dot N)N
+    const dot = b.vx * nx + b.vy * ny;
+    
+    // Only bounce if moving INTO the wall
+    if (dot < 0) {
+        b.vx = (b.vx - 2 * dot * nx) * CONFIG.ELASTICITY;
+        b.vy = (b.vy - 2 * dot * ny) * CONFIG.ELASTICITY;
+    }
+}
+
+function checkWin() {
+    // Goal Zone
+    const goalR = maxRadius / (CONFIG.RINGS + 2);
+    let count = 0;
+    
+    balls.forEach(b => {
+        const d = Math.sqrt((b.x - centerX)**2 + (b.y - centerY)**2);
+        if(d < goalR) count++;
+    });
+    
+    if(count === CONFIG.BALL_COUNT && !gameState.won) {
+        gameState.won = true;
+        gameState.playing = false;
+        
+        const elapsed = Date.now() - gameState.startTime;
+        const finalStr = formatTime(elapsed);
+        document.getElementById('finalTime').innerText = finalStr;
+        document.getElementById('winScreen').classList.remove('hidden');
+    }
+}
+
+/**
+ * --- RENDERING ---
+ */
+function loop() {
+    // 1. Logic
+    updatePhysics();
+    updateTimer();
+
+    // 2. Render
+    ctx.clearRect(0,0,width,height);
+    
+    drawBoard();
+    drawMaze();
+    drawBalls();
+
+    requestAnimationFrame(loop);
+}
+
+function drawBoard() {
+    // Wood Texture Background
+    const grad = ctx.createRadialGradient(centerX, centerY, 10, centerX, centerY, maxRadius*1.2);
+    grad.addColorStop(0, '#eecfa1');
+    grad.addColorStop(1, '#8d6e63');
+    
+    ctx.fillStyle = grad;
+    ctx.fillRect(0,0,width,height);
+    
+    // Goal Hole
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, maxRadius / (CONFIG.RINGS + 2), 0, PI2);
+    ctx.fillStyle = '#1b5e20';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    // Inner Shadow of hole
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = 'black';
+    ctx.stroke();
+    ctx.shadowBlur = 0;
 }
 
 function drawMaze() {
-    // Background of maze (slightly darker recessed wood)
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, maxRadius, 0, Math.PI*2);
-    ctx.fillStyle = '#deb887';
-    ctx.fill();
-    ctx.strokeStyle = '#8b4513';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    // Walls
+    ctx.lineCap = 'round'; // Rounds the ends of the walls visually
+    
+    // Drop Shadow for Walls (creates depth)
+    ctx.shadowColor = 'rgba(0,0,0,0.4)';
+    ctx.shadowBlur = 6;
+    ctx.shadowOffsetX = 2;
+    ctx.shadowOffsetY = 4;
 
-    // Goal Zone
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, channelWidth*0.8, 0, Math.PI*2);
-    ctx.fillStyle = '#27ae60'; // Green felt center
-    ctx.fill();
-    ctx.strokeStyle = '#1e8449';
-    ctx.stroke();
-
-    // Draw Walls
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = '#5d4037'; // Deep brown wood walls
-    ctx.lineWidth = WALL_THICKNESS;
-
-    for (let wall of mazeWalls) {
+    walls.forEach(w => {
         ctx.beginPath();
-        if (wall.type === 'arc') {
-            // wall.start and wall.end are angles
-            // Draw counter-clockwise to respect the gap logic
-            ctx.arc(centerX, centerY, wall.radius, wall.start, wall.end);
-        } else {
-            // Radial
-            const x1 = centerX + Math.cos(wall.angle) * wall.innerR;
-            const y1 = centerY + Math.sin(wall.angle) * wall.innerR;
-            const x2 = centerX + Math.cos(wall.angle) * wall.outerR;
-            const y2 = centerY + Math.sin(wall.angle) * wall.outerR;
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(x2, y2);
-        }
+        ctx.arc(centerX, centerY, w.radius, w.startAngle, w.endAngle);
+        ctx.lineWidth = w.width;
+        ctx.strokeStyle = '#4e342e';
         ctx.stroke();
-    }
-}
-
-function loop() {
-    if (!isPlaying) return;
-    
-    ctx.clearRect(0,0,width,height);
-    
-    drawWoodBackground();
-    drawMaze();
-    
-    let ballsInGoal = 0;
-    const goalRad = channelWidth * 0.8;
-
-    balls.forEach(b => {
-        b.update();
-        b.draw();
         
-        // Check win
-        const d = Math.hypot(b.x - centerX, b.y - centerY);
-        if (d < goalRad) ballsInGoal++;
+        // Inner highlight for 3D effect on wall top
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, w.radius, w.startAngle, w.endAngle);
+        ctx.lineWidth = w.width - 4;
+        ctx.strokeStyle = '#6d4c41';
+        ctx.stroke();
     });
 
-    // Update Timer
-    const elapsed = Math.floor((Date.now() - startTime)/1000);
-    const m = Math.floor(elapsed/60);
-    const s = elapsed % 60;
-    const timeStr = (m<10?'0':'')+m + ':' + (s<10?'0':'')+s;
-    document.getElementById('timerDisplay').innerText = timeStr;
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+}
 
-    if (ballsInGoal === BALL_COUNT) {
-        isPlaying = false;
-        document.getElementById('finalTime').innerText = timeStr;
-        document.getElementById('winScreen').classList.remove('hidden');
+function drawBalls() {
+    balls.forEach(b => {
+        // Drop Shadow
+        ctx.beginPath();
+        ctx.arc(b.x + 2, b.y + 4, b.radius, 0, PI2);
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.fill();
+
+        // Ball Body
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.radius, 0, PI2);
+        
+        // Metallic Gradient
+        const grad = ctx.createRadialGradient(
+            b.x - b.radius*0.3, b.y - b.radius*0.3, b.radius*0.1, 
+            b.x, b.y, b.radius
+        );
+        grad.addColorStop(0, '#ffffff');
+        grad.addColorStop(0.4, '#cfd8dc');
+        grad.addColorStop(1, '#546e7a');
+        
+        ctx.fillStyle = grad;
+        ctx.fill();
+        
+        // Shine
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.arc(b.x - b.radius*0.3, b.y - b.radius*0.3, 2, 0, PI2);
+        ctx.fill();
+    });
+}
+
+function updateTimer() {
+    if(!gameState.playing) return;
+    const elapsed = Date.now() - gameState.startTime;
+    document.getElementById('timerBadge').innerText = formatTime(elapsed);
+}
+
+function formatTime(ms) {
+    const s = Math.floor(ms / 1000);
+    const m = Math.floor(s / 60);
+    const remS = s % 60;
+    return `${m < 10 ? '0'+m : m}:${remS < 10 ? '0'+remS : remS}`;
+}
+
+/**
+ * --- IOS PERMISSIONS ---
+ */
+function requestPermissions() {
+    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+        DeviceOrientationEvent.requestPermission()
+            .then(state => {
+                if (state === 'granted') startGame();
+                else alert('Tilt controls are required to play.');
+            })
+            .catch(console.error);
     } else {
-        animationFrameId = requestAnimationFrame(loop);
+        startGame();
     }
 }
 
 // Boot
 init();
-
 </script>
 </body>
 </html>
