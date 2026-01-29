@@ -3,309 +3,327 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Pro Wood Labyrinth</title>
+    <title>Classic Wood Labyrinth</title>
     <style>
-        :root {
-            --wood-dark: #3e2723;
-            --wood-light: #8d6e63;
-            --felt-green: #2e7d32;
-            --steel: #b0bec5;
-        }
-
+        * { box-sizing: border-box; }
         body {
             margin: 0;
             overflow: hidden;
-            background-color: #1a1005;
-            font-family: 'Helvetica Neue', sans-serif;
+            background: linear-gradient(135deg, #1a0f05 0%, #2d1810 50%, #1a0f05 100%);
+            font-family: 'Georgia', serif;
             touch-action: none;
             user-select: none;
             -webkit-user-select: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
         }
-
         #gameCanvas {
             display: block;
-            margin: 0 auto;
-            /* Box shadow for board depth */
-            box-shadow: 0 0 50px rgba(0,0,0,0.8);
+            border-radius: 50%;
+            box-shadow: 
+                0 0 0 8px #5d4037,
+                0 0 0 12px #3e2723,
+                0 0 60px rgba(0,0,0,0.8),
+                0 0 100px rgba(139,90,43,0.3);
         }
-
-        /* UI OVERLAYS */
         .overlay {
-            position: absolute;
+            position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            background: rgba(20, 10, 5, 0.92);
+            background: rgba(15, 8, 3, 0.95);
             color: #e3c099;
             z-index: 20;
             transition: opacity 0.4s ease;
-            backdrop-filter: blur(5px);
+            backdrop-filter: blur(8px);
         }
-
         h1 {
             font-size: 2.5rem;
             text-transform: uppercase;
-            letter-spacing: 4px;
+            letter-spacing: 6px;
             color: #d4a76a;
             margin-bottom: 0.5rem;
-            text-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            text-shadow: 0 4px 20px rgba(212,167,106,0.4);
         }
-
         p {
             font-size: 1rem;
             color: #a1887f;
             margin-bottom: 2rem;
-            max-width: 80%;
+            max-width: 85%;
             text-align: center;
-            line-height: 1.5;
+            line-height: 1.6;
         }
-
         button {
-            padding: 16px 48px;
+            padding: 18px 56px;
             font-size: 1.1rem;
             text-transform: uppercase;
-            letter-spacing: 1px;
-            background: linear-gradient(to bottom, #d4a76a, #a67c52);
+            letter-spacing: 2px;
+            background: linear-gradient(to bottom, #e8c896, #c4956a);
             color: #2b1d0e;
-            border: 1px solid #754c24;
-            border-radius: 30px;
+            border: none;
+            border-radius: 40px;
             font-weight: 800;
             cursor: pointer;
-            box-shadow: 0 6px 0 #5d4037, 0 15px 20px rgba(0,0,0,0.4);
-            transition: transform 0.1s, box-shadow 0.1s;
+            box-shadow: 0 8px 0 #8b5a2b, 0 15px 30px rgba(0,0,0,0.5);
+            transition: all 0.15s ease;
         }
-
-        button:active {
-            transform: translateY(4px);
-            box-shadow: 0 2px 0 #5d4037, 0 5px 10px rgba(0,0,0,0.4);
-        }
-
+        button:hover { transform: translateY(-2px); }
+        button:active { transform: translateY(6px); box-shadow: 0 2px 0 #8b5a2b; }
         #hud {
-            position: absolute;
-            top: 20px;
-            width: 100%;
-            text-align: center;
+            position: fixed;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
             pointer-events: none;
             z-index: 10;
         }
-
         #timerBadge {
-            background: rgba(0, 0, 0, 0.4);
-            padding: 8px 16px;
-            border-radius: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px 20px;
+            border-radius: 25px;
             color: #fff;
             font-weight: 700;
-            font-size: 1.2rem;
-            border: 1px solid rgba(255,255,255,0.1);
+            font-size: 1rem;
+            border: 1px solid rgba(255,255,255,0.15);
         }
-
-        .hidden { 
-            opacity: 0; 
-            pointer-events: none; 
+        .hidden { opacity: 0; pointer-events: none; }
+        #instructions {
+            position: fixed;
+            bottom: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255,255,255,0.5);
+            font-size: 0.8rem;
+            pointer-events: none;
+            z-index: 10;
         }
     </style>
 </head>
 <body>
-
-    <div id="hud"><span id="timerBadge">00:00</span></div>
-
+    <div id="hud"><span id="timerBadge">00:00 | 0/4</span></div>
+    <div id="instructions">Arrow keys / WASD to tilt</div>
+    
     <div id="startScreen" class="overlay">
         <h1>Labyrinth</h1>
-        <p>Hold your device flat.<br>Tilt gently to guide 4 steel balls to the center.</p>
-        <button id="btnStart">Unlock & Play</button>
+        <p>Guide all 4 steel balls through the maze to the center goal.<br>Tilt your device or use arrow keys.</p>
+        <button id="btnStart">Play</button>
     </div>
 
     <div id="winScreen" class="overlay hidden">
-        <h1 style="color:#81c784">All Balls Secured!</h1>
-        <p>Completed in <span id="finalTime" style="color:white; font-weight:bold;"></span></p>
+        <h1 style="color:#a5d6a7">Victory!</h1>
+        <p>All balls secured in <span id="finalTime" style="color:#fff; font-weight:bold;"></span></p>
         <button id="btnRestart">Play Again</button>
     </div>
 
     <canvas id="gameCanvas"></canvas>
 
 <script>
-/**
- * --- PHYSICS CONFIGURATION ---
- * Tuned for smooth mobile gameplay without jitter or tunneling
- */
 const CONFIG = {
-    RINGS: 7,               // Number of concentric walls
-    BALL_COUNT: 4,          
-    WALL_WIDTH: 14,         // Thickness of walls (pixels)
-    BALL_RADIUS: 8,         // Radius of ball (pixels)
-    FRICTION: 0.92,         // Velocity damping per frame (higher friction = less slide, smoother)
-    ELASTICITY: 0.05,       // Bounciness on wall hit (very low to prevent jitter)
-    TILT_SENSITIVITY: 0.015, // Very low sensitivity to avoid overshooting
-    SUB_STEPS: 8,           // Physics steps per frame for collision detection (more accurate)
-    INPUT_SMOOTHING: 0.7,   // Accelerometer smoothing (higher = less jittery)
-    MAX_VELOCITY: 3.5,      // Cap velocity to prevent overshoots
-    POSITIONAL_CORRECTION: 0.9 // How aggressively to correct penetrations
+    RINGS: 8,
+    SECTORS: 12,
+    BALL_COUNT: 4,
+    WALL_WIDTH: 5,
+    BALL_RADIUS: 7,
+    FRICTION: 0.988,
+    TILT_SENSITIVITY: 0.15,
+    MAX_VELOCITY: 2.5,
+    SUB_STEPS: 16
 };
 
-// --- SYSTEM GLOBALS ---
 const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d', { alpha: false }); // Optimize rendering
-let width, height, centerX, centerY, maxRadius;
-
-let gameState = {
-    playing: false,
-    won: false,
-    startTime: 0,
-    timeStr: "00:00"
-};
-
-// Physics Inputs
-let input = { x: 0, y: 0 }; // Smoothed input
-let targetInput = { x: 0, y: 0 }; // Raw input
-
-// Entities
-let balls = [];
-let walls = [];
-
-/**
- * --- MATH HELPERS ---
- */
+const ctx = canvas.getContext('2d');
 const PI2 = Math.PI * 2;
 
-function distSq(x1, y1, x2, y2) { return (x1-x2)**2 + (y1-y2)**2; }
-function normalizeAngle(a) { 
-    a = a % PI2;
-    return a < 0 ? a + PI2 : a;
-}
+let width, height, centerX, centerY, maxRadius;
+let gameState = { playing: false, won: false, startTime: 0, timeStr: "00:00" };
+let tilt = { x: 0, y: 0 };
+let balls = [];
+let walls = [];
+let goalRadius, ringWidth, sectorAngle;
 
-/**
- * --- INITIALIZATION & MAZE GENERATION ---
- */
+const keys = { left: false, right: false, up: false, down: false };
+
 function init() {
     resize();
     window.addEventListener('resize', resize);
-    
-    // Controls
     document.getElementById('btnStart').addEventListener('click', requestPermissions);
     document.getElementById('btnRestart').addEventListener('click', startGame);
-
-    // Orientation
     window.addEventListener('deviceorientation', handleOrientation);
-
-    // Start Loop
+    
+    window.addEventListener('keydown', e => {
+        if(['ArrowLeft','a','A'].includes(e.key)) keys.left = true;
+        if(['ArrowRight','d','D'].includes(e.key)) keys.right = true;
+        if(['ArrowUp','w','W'].includes(e.key)) keys.up = true;
+        if(['ArrowDown','s','S'].includes(e.key)) keys.down = true;
+        e.preventDefault();
+    });
+    window.addEventListener('keyup', e => {
+        if(['ArrowLeft','a','A'].includes(e.key)) keys.left = false;
+        if(['ArrowRight','d','D'].includes(e.key)) keys.right = false;
+        if(['ArrowUp','w','W'].includes(e.key)) keys.up = false;
+        if(['ArrowDown','s','S'].includes(e.key)) keys.down = false;
+    });
+    
     requestAnimationFrame(loop);
 }
 
 function resize() {
-    width = Math.min(window.innerWidth, 800); // Max width constraint
-    height = window.innerHeight;
-    canvas.width = width;
-    canvas.height = height;
-    centerX = width / 2;
-    centerY = height / 2;
-    maxRadius = Math.min(width, height) * 0.45;
+    const size = Math.min(window.innerWidth, window.innerHeight, 580) - 30;
+    width = height = size;
+    canvas.width = canvas.height = size;
+    centerX = centerY = size / 2;
+    maxRadius = size * 0.47;
+    goalRadius = maxRadius * 0.14;
+    ringWidth = (maxRadius - goalRadius) / CONFIG.RINGS;
+    sectorAngle = PI2 / CONFIG.SECTORS;
 }
 
-function generateLevel() {
+function generateMaze() {
     walls = [];
-    const step = maxRadius / (CONFIG.RINGS + 1);
-
-    // Create a randomized maze pattern for variety
-    const gapPattern = [];
     
-    // Generate ring gaps with random rotation and size variation
-    // This makes each game different
-    const spiralTwists = Math.random() * 3 + 1; // Random number of rotations (1-4)
-    const startingGapAngle = Math.random() * PI2; // Random starting position
+    // Create grid [ring][sector]
+    const grid = [];
+    for (let r = 0; r < CONFIG.RINGS; r++) {
+        grid[r] = [];
+        for (let s = 0; s < CONFIG.SECTORS; s++) {
+            grid[r][s] = {
+                innerWall: true,
+                cwWall: true,
+                visited: false
+            };
+        }
+    }
     
-    for (let i = 0; i < CONFIG.RINGS; i++) {
-        // Random rotation each ring for variety
-        const baseAngle = (i / CONFIG.RINGS) * PI2;
-        const rotationFactor = (i / CONFIG.RINGS) * PI2 * spiralTwists; // Variable rotations
-        const randomOffset = (Math.random() - 0.5) * 0.4; // Random jitter
-        const gapAngle = startingGapAngle + baseAngle + rotationFactor + randomOffset;
+    // Start maze generation from center and work outward
+    // This ensures paths radiate from center
+    const startSector = Math.floor(Math.random() * CONFIG.SECTORS);
+    
+    const stack = [];
+    let current = { r: 0, s: startSector };
+    grid[current.r][current.s].visited = true;
+    
+    function getUnvisitedNeighbors(r, s) {
+        const neighbors = [];
         
-        // Variable gap sizes for variety (but still navigable)
-        // Larger gaps for inner rings (easier to enter center), smaller for outer rings (more challenge)
-        const ringProgress = i / CONFIG.RINGS; // 0 for outer, 1 for inner
-        const baseSizeDeg = 50 + ringProgress * 30; // 50-80 degrees (50 outer, 80 inner)
-        const gapSizeDeg = baseSizeDeg + (Math.random() - 0.5) * 15; // Add some variance
-        const gapSizeRad = (gapSizeDeg * Math.PI) / 180;
+        // Inner neighbor
+        if (r > 0 && !grid[r-1][s].visited) {
+            neighbors.push({ r: r-1, s: s, dir: 'inner' });
+        }
         
-        gapPattern.push({
-            ringIndex: i + 1,
-            gapAngle: gapAngle,
-            gapSize: gapSizeRad
-        });
+        // Outer neighbor
+        if (r < CONFIG.RINGS - 1 && !grid[r+1][s].visited) {
+            neighbors.push({ r: r+1, s: s, dir: 'outer' });
+        }
+        
+        // CCW neighbor
+        const ccw = (s - 1 + CONFIG.SECTORS) % CONFIG.SECTORS;
+        if (!grid[r][ccw].visited) {
+            neighbors.push({ r: r, s: ccw, dir: 'ccw' });
+        }
+        
+        // CW neighbor
+        const cw = (s + 1) % CONFIG.SECTORS;
+        if (!grid[r][cw].visited) {
+            neighbors.push({ r: r, s: cw, dir: 'cw' });
+        }
+        
+        return neighbors;
     }
-
-    // 1. CONCENTRIC RINGS (with randomized gaps)
-    for (let i = 1; i <= CONFIG.RINGS; i++) {
-        const r = i * step;
-        const gapInfo = gapPattern[i - 1];
-        
-        const gapAngle = gapInfo.gapAngle;
-        const gapSize = gapInfo.gapSize;
-
-        // Arc wall: from gap-end around to gap-start
-        const start = gapAngle + gapSize / 2;
-        const end = gapAngle + PI2 - gapSize / 2;
-
-        walls.push({
-            type: 'arc',
-            radius: r,
-            startAngle: start,
-            endAngle: end,
-            width: CONFIG.WALL_WIDTH
-        });
+    
+    function removeWallBetween(fromR, fromS, toR, toS, dir) {
+        if (dir === 'inner') {
+            grid[fromR][fromS].innerWall = false;
+        } else if (dir === 'outer') {
+            grid[toR][toS].innerWall = false;
+        } else if (dir === 'cw') {
+            grid[fromR][fromS].cwWall = false;
+        } else if (dir === 'ccw') {
+            grid[toR][toS].cwWall = false;
+        }
     }
-
-    // 2. RADIAL BLOCKING WALLS (Dead ends between rings)
-    // Randomized for variety
-    for (let i = 1; i < CONFIG.RINGS; i++) {
-        const innerR = i * step;
-        const outerR = (i + 1) * step;
-
-        // Random number of barriers (2-4 per ring)
-        const barrierCount = 2 + Math.floor(Math.random() * 3);
+    
+    // Recursive backtracker
+    while (true) {
+        const neighbors = getUnvisitedNeighbors(current.r, current.s);
         
-        for (let b = 0; b < barrierCount; b++) {
-            // Randomize barrier positions to avoid repeating patterns
-            const randomAngle = Math.random() * PI2;
-            // Position away from current ring's gap
-            const distFromGap = Math.abs(randomAngle - gapPattern[i-1].gapAngle);
+        if (neighbors.length > 0) {
+            const next = neighbors[Math.floor(Math.random() * neighbors.length)];
+            stack.push(current);
+            removeWallBetween(current.r, current.s, next.r, next.s, next.dir);
+            current = { r: next.r, s: next.s };
+            grid[current.r][current.s].visited = true;
+        } else if (stack.length > 0) {
+            current = stack.pop();
+        } else {
+            break;
+        }
+    }
+    
+    // Open multiple paths to goal from innermost ring (ring 0)
+    // This ensures all balls can reach the center
+    const exitCount = 3;
+    const usedSectors = new Set();
+    for (let i = 0; i < exitCount; i++) {
+        let exitSector;
+        do {
+            exitSector = Math.floor(Math.random() * CONFIG.SECTORS);
+        } while (usedSectors.has(exitSector));
+        usedSectors.add(exitSector);
+        grid[0][exitSector].innerWall = false;
+    }
+    
+    // Convert grid to walls
+    for (let r = 0; r < CONFIG.RINGS; r++) {
+        const innerR = goalRadius + r * ringWidth;
+        const outerR = goalRadius + (r + 1) * ringWidth;
+        
+        for (let s = 0; s < CONFIG.SECTORS; s++) {
+            const cell = grid[r][s];
+            const startAngle = s * sectorAngle;
+            const endAngle = (s + 1) * sectorAngle;
             
-            // Only place barrier if it's far enough from the gap
-            if (distFromGap > gapPattern[i-1].gapSize * 1.5) {
+            // Inner arc wall
+            if (cell.innerWall) {
+                walls.push({
+                    type: 'arc',
+                    radius: innerR,
+                    startAngle: startAngle + 0.04,
+                    endAngle: endAngle - 0.04
+                });
+            }
+            
+            // CW radial wall
+            if (cell.cwWall) {
                 walls.push({
                     type: 'radial',
-                    angle: randomAngle,
-                    innerR: innerR,
-                    outerR: outerR,
-                    width: CONFIG.WALL_WIDTH
+                    angle: endAngle,
+                    innerR: innerR + 2,
+                    outerR: outerR - 2
                 });
             }
         }
     }
-
-    // 3. OUTER BOUNDARY RING (Solid)
-    walls.push({
-        type: 'arc',
-        radius: maxRadius,
-        startAngle: 0,
-        endAngle: PI2 + 0.1, // Full circle
-        width: CONFIG.WALL_WIDTH * 2 // Thicker boundary
-    });
-}
-
-function spawnBalls() {
+    
+    // Outer boundary
+    walls.push({ type: 'boundary', radius: maxRadius });
+    
+    // Spawn 4 balls spread around the outer ring
     balls = [];
-    // Spawn balls in the outermost channel, spread out
-    const spawnR = maxRadius * 0.85;
-    for(let i=0; i<CONFIG.BALL_COUNT; i++) {
-        const angle = (i / CONFIG.BALL_COUNT) * PI2 + 0.5; // Offset slightly
+    for (let i = 0; i < CONFIG.BALL_COUNT; i++) {
+        const sector = Math.floor((i / CONFIG.BALL_COUNT) * CONFIG.SECTORS + CONFIG.SECTORS / (CONFIG.BALL_COUNT * 2));
+        const spawnAngle = (sector + 0.5) * sectorAngle;
+        const spawnR = goalRadius + (CONFIG.RINGS - 0.5) * ringWidth;
+        
         balls.push({
-            x: centerX + Math.cos(angle) * spawnR,
-            y: centerY + Math.sin(angle) * spawnR,
+            x: centerX + Math.cos(spawnAngle) * spawnR,
+            y: centerY + Math.sin(spawnAngle) * spawnR,
             vx: 0, vy: 0,
-            radius: CONFIG.BALL_RADIUS
+            r: CONFIG.BALL_RADIUS,
+            inGoal: false
         });
     }
 }
@@ -313,567 +331,430 @@ function spawnBalls() {
 function startGame() {
     document.getElementById('startScreen').classList.add('hidden');
     document.getElementById('winScreen').classList.add('hidden');
-    
     resize();
-    generateLevel();
-    spawnBalls();
-    
-    gameState.playing = true;
-    gameState.won = false;
-    gameState.startTime = Date.now();
-    
-    // Reset inputs
-    input = {x:0, y:0};
-    targetInput = {x:0, y:0};
+    generateMaze();
+    gameState = { playing: true, won: false, startTime: Date.now(), timeStr: "00:00" };
+    tilt = { x: 0, y: 0 };
 }
 
-/**
- * --- PHYSICS ENGINE (SUB-STEPPED) ---
- */
 function handleOrientation(e) {
-    if(!gameState.playing) return;
-    
-    // Gamma: Left/Right (-90 to 90)
-    // Beta: Front/Back (-180 to 180)
-    
-    // Clamp values to avoid extreme flips
-    const x = Math.min(Math.max(e.gamma, -45), 45); 
-    const y = Math.min(Math.max(e.beta, -45), 45);
-    
-    targetInput.x = x;
-    targetInput.y = y;
+    if (!gameState.playing) return;
+    const x = Math.max(-45, Math.min(45, e.gamma || 0));
+    const y = Math.max(-45, Math.min(45, e.beta || 0));
+    tilt.x = x / 45;
+    tilt.y = y / 45;
 }
 
 function updatePhysics() {
-    if(!gameState.playing) return;
-
-    // 1. Smooth Accelerometer Input (Low Pass Filter)
-    // Higher value = more responsive but jerkier
-    input.x += (targetInput.x - input.x) * CONFIG.INPUT_SMOOTHING;
-    input.y += (targetInput.y - input.y) * CONFIG.INPUT_SMOOTHING;
-
-    // Calculate gravity force based on tilt
-    // Very low sensitivity to prevent aggressive movement
-    const gx = input.x * CONFIG.TILT_SENSITIVITY;
-    const gy = input.y * CONFIG.TILT_SENSITIVITY;
-
-    // 2. Sub-Stepping Physics Loop
-    // Runs physics multiple times per frame for better collision detection
-    const dtSubstep = 1 / (60 * CONFIG.SUB_STEPS);
+    if (!gameState.playing) return;
     
-    for(let step = 0; step < CONFIG.SUB_STEPS; step++) {
+    let kx = 0, ky = 0;
+    if (keys.left) kx -= 1;
+    if (keys.right) kx += 1;
+    if (keys.up) ky -= 1;
+    if (keys.down) ky += 1;
+    
+    const inputX = kx !== 0 ? kx : tilt.x;
+    const inputY = ky !== 0 ? ky : tilt.y;
+    
+    const gx = inputX * CONFIG.TILT_SENSITIVITY;
+    const gy = inputY * CONFIG.TILT_SENSITIVITY;
+    
+    for (let step = 0; step < CONFIG.SUB_STEPS; step++) {
         balls.forEach(b => {
-            // 2a. Apply Forces
-            b.vx += gx * 0.5; // Scaled down further
-            b.vy += gy * 0.5;
+            b.vx += gx / CONFIG.SUB_STEPS;
+            b.vy += gy / CONFIG.SUB_STEPS;
             
-            // 2b. Clamp Velocity (prevent overshooting)
-            const speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+            const speed = Math.hypot(b.vx, b.vy);
             if (speed > CONFIG.MAX_VELOCITY) {
-                const scale = CONFIG.MAX_VELOCITY / speed;
-                b.vx *= scale;
-                b.vy *= scale;
+                b.vx = (b.vx / speed) * CONFIG.MAX_VELOCITY;
+                b.vy = (b.vy / speed) * CONFIG.MAX_VELOCITY;
             }
             
-            // 2c. Friction/Damping
             b.vx *= CONFIG.FRICTION;
             b.vy *= CONFIG.FRICTION;
-
-            // 2d. Position Update
-            b.x += b.vx;
-            b.y += b.vy;
-
-            // 2e. Solve Collisions & Constraints
-            solveCollisions(b);
+            
+            b.x += b.vx / CONFIG.SUB_STEPS;
+            b.y += b.vy / CONFIG.SUB_STEPS;
         });
-
-        // 2f. Ball-to-Ball Collisions (prevents overlapping and stacking)
-        for (let i = 0; i < balls.length; i++) {
-            for (let j = i + 1; j < balls.length; j++) {
-                solveBallCollision(balls[i], balls[j]);
-            }
-        }
+        
+        // Wall collisions
+        balls.forEach(b => resolveWallCollisions(b));
+        
+        // Ball-to-ball collisions
+        resolveBallCollisions();
     }
-
-    // 3. Win Condition Check
+    
     checkWin();
 }
 
-function solveCollisions(b) {
-    /**
-     * IMPROVED COLLISION DETECTION & RESPONSE
-     * Uses proper geometric tests to prevent penetration
-     * Handles both arc and radial walls
-     */
-    const halfWall = CONFIG.WALL_WIDTH / 2;
-    const ballR = b.radius;
-
-    // 1. BOUNDARY ENFORCEMENT - Keep balls from leaving the board (works in any orientation)
-    const dx = b.x - centerX;
-    const dy = b.y - centerY;
-    const distFromCenter = Math.sqrt(dx * dx + dy * dy);
-    const boundaryRadius = maxRadius * 0.92;
+function resolveWallCollisions(b) {
+    const hw = CONFIG.WALL_WIDTH / 2;
     
-    if (distFromCenter > boundaryRadius - ballR) {
-        // Push ball back inside more aggressively - prevents escape when vertical
-        const angle = Math.atan2(dy, dx);
-        const correctedDist = boundaryRadius - ballR - 2; // Extra safety margin
-        b.x = centerX + Math.cos(angle) * correctedDist;
-        b.y = centerY + Math.sin(angle) * correctedDist;
-        
-        // Kill outward velocity completely
-        const nx = Math.cos(angle);
-        const ny = Math.sin(angle);
-        const velDot = b.vx * nx + b.vy * ny;
-        if (velDot > 0) {
-            // Remove ALL outward velocity (not partial)
-            b.vx -= velDot * nx * 1.3;
-            b.vy -= velDot * ny * 1.3;
-        }
-    }
-
-    // 2. COLLISION WITH WALLS
     walls.forEach(w => {
         if (w.type === 'arc') {
-            collideWithArcWall(b, w, halfWall);
+            collideArc(b, w.radius, w.startAngle, w.endAngle, hw);
         } else if (w.type === 'radial') {
-            collideWithRadialWall(b, w, halfWall);
+            collideRadial(b, w.angle, w.innerR, w.outerR, hw);
+        } else if (w.type === 'boundary') {
+            collideBoundary(b, w.radius, hw);
         }
     });
 }
 
-function collideWithArcWall(b, w, halfWall) {
-    /**
-     * Collision detection for concentric ring walls
-     */
-    const ballR = b.radius;
-    
-    // Get vector from center to ball
+function collideArc(b, radius, startAngle, endAngle, hw) {
     const dx = b.x - centerX;
     const dy = b.y - centerY;
-    const distSq = dx * dx + dy * dy;
-    const dist = Math.sqrt(distSq);
+    const dist = Math.hypot(dx, dy);
     
-    // Skip if too far away
-    const maxCheck = w.radius + halfWall + ballR + 20;
-    if (dist > maxCheck) return;
-
-    // Check if ball is in the wall's radial zone
-    const inner = w.radius - halfWall;
-    const outer = w.radius + halfWall;
+    if (Math.abs(dist - radius) > hw + b.r + 5) return;
     
-    if (dist < inner - ballR || dist > outer + ballR) {
-        return; // Too far in any direction
+    let angle = Math.atan2(dy, dx);
+    if (angle < 0) angle += PI2;
+    
+    if (!isAngleInRange(angle, startAngle, endAngle)) {
+        checkEndpoint(b, radius, startAngle, hw);
+        checkEndpoint(b, radius, endAngle, hw);
+        return;
     }
-
-    // Get ball's angle
-    let ballAngle = Math.atan2(dy, dx);
-    if (ballAngle < 0) ballAngle += PI2;
-
-    // Check if angle is within the wall's angular range
-    const angleInWall = isAngleBetween(ballAngle, w.startAngle, w.endAngle);
-
-    if (angleInWall) {
-        // Ball is within the angular range of the wall
-        const penetration = calculateRadialPenetration(dist, inner, outer, ballR);
+    
+    const inner = radius - hw;
+    const outer = radius + hw;
+    
+    if (dist + b.r > inner && dist - b.r < outer) {
+        const nx = dx / dist;
+        const ny = dy / dist;
         
-        if (penetration > 0) {
-            // COLLISION! Push ball out
-            const nx = dx / dist;
-            const ny = dy / dist;
-            const correctionDir = dist < w.radius ? -1 : 1;
-            const correction = penetration * CONFIG.POSITIONAL_CORRECTION;
-            
-            b.x += nx * correction * correctionDir;
-            b.y += ny * correction * correctionDir;
-
-            // Dampen velocity with very low bounce to reduce jitter
-            const velocityDot = b.vx * nx + b.vy * ny;
-            if ((velocityDot > 0 && correctionDir > 0) || (velocityDot < 0 && correctionDir < 0)) {
-                const bounce = 1 - CONFIG.ELASTICITY;
-                b.vx -= velocityDot * nx * bounce * 0.85; // Extra damping factor
-                b.vy -= velocityDot * ny * bounce * 0.85;
+        if (dist < radius) {
+            const target = inner - b.r - 1;
+            if (dist > target) {
+                b.x = centerX + nx * target;
+                b.y = centerY + ny * target;
+                const dot = b.vx * nx + b.vy * ny;
+                if (dot > 0) { b.vx -= dot * nx; b.vy -= dot * ny; }
+            }
+        } else {
+            const target = outer + b.r + 1;
+            if (dist < target) {
+                b.x = centerX + nx * target;
+                b.y = centerY + ny * target;
+                const dot = b.vx * nx + b.vy * ny;
+                if (dot < 0) { b.vx -= dot * nx; b.vy -= dot * ny; }
             }
         }
-    } else {
-        // Check collision with wall end caps
-        checkCapCollision(b, w.radius, w.startAngle);
-        checkCapCollision(b, w.radius, w.endAngle);
     }
 }
 
-function collideWithRadialWall(b, w, halfWall) {
-    /**
-     * Collision detection for radial blocking walls (dead ends)
-     */
-    const ballR = b.radius;
+function checkEndpoint(b, radius, angle, hw) {
+    const px = centerX + Math.cos(angle) * radius;
+    const py = centerY + Math.sin(angle) * radius;
+    const dx = b.x - px;
+    const dy = b.y - py;
+    const dist = Math.hypot(dx, dy);
+    const minDist = b.r + hw;
     
-    // Radial wall is a line from angle w.angle, from innerR to outerR
-    const wallAngle = w.angle;
-    const wallX = Math.cos(wallAngle);
-    const wallY = Math.sin(wallAngle);
-    
-    // Normal to wall (perpendicular)
-    const nx = -wallY;
-    const ny = wallX;
-    
-    // Vector from wall origin to ball
+    if (dist < minDist && dist > 0.1) {
+        const nx = dx / dist;
+        const ny = dy / dist;
+        const push = minDist - dist + 1;
+        b.x += nx * push;
+        b.y += ny * push;
+        const dot = b.vx * nx + b.vy * ny;
+        if (dot < 0) { b.vx -= dot * nx * 0.9; b.vy -= dot * ny * 0.9; }
+    }
+}
+
+function collideRadial(b, angle, innerR, outerR, hw) {
     const dx = b.x - centerX;
     const dy = b.y - centerY;
+    const dist = Math.hypot(dx, dy);
     
-    // Distance from ball to the infinite line defined by wall angle
-    const distToLine = Math.abs(dx * nx + dy * ny);
+    if (dist < innerR - b.r || dist > outerR + b.r) return;
     
-    // Only check if ball is close to the wall
-    if (distToLine > ballR + halfWall) return;
+    const wallDirX = Math.cos(angle);
+    const wallDirY = Math.sin(angle);
+    const wallNormX = -wallDirY;
+    const wallNormY = wallDirX;
     
-    // Check if ball is within the radial extent of the wall
-    const radialDist = dx * wallX + dy * wallY;
+    const projDist = dx * wallDirX + dy * wallDirY;
+    if (projDist < innerR - b.r || projDist > outerR + b.r) return;
     
-    if (radialDist < w.innerR - ballR || radialDist > w.outerR + ballR) {
-        return; // Outside radial bounds
+    const perpDist = dx * wallNormX + dy * wallNormY;
+    
+    if (Math.abs(perpDist) < hw + b.r) {
+        const sign = perpDist > 0 ? 1 : -1;
+        const penetration = hw + b.r - Math.abs(perpDist);
+        
+        if (penetration > 0) {
+            b.x += wallNormX * (penetration + 1) * sign;
+            b.y += wallNormY * (penetration + 1) * sign;
+            
+            const dot = b.vx * wallNormX + b.vy * wallNormY;
+            if (dot * sign < 0) {
+                b.vx -= dot * wallNormX * 0.9;
+                b.vy -= dot * wallNormY * 0.9;
+            }
+        }
     }
     
-    // Ball is hitting the wall
-    // Determine which side of the wall
-    const sideSign = (dx * nx + dy * ny) > 0 ? 1 : -1;
-    const penetration = ballR + halfWall - distToLine;
+    checkRadialEndpoint(b, angle, innerR, hw);
+    checkRadialEndpoint(b, angle, outerR, hw);
+}
+
+function checkRadialEndpoint(b, angle, r, hw) {
+    const px = centerX + Math.cos(angle) * r;
+    const py = centerY + Math.sin(angle) * r;
+    const dx = b.x - px;
+    const dy = b.y - py;
+    const dist = Math.hypot(dx, dy);
+    const minDist = b.r + hw;
     
-    if (penetration > 0) {
-        // Push ball away from wall
-        const pushX = nx * penetration * CONFIG.POSITIONAL_CORRECTION * sideSign;
-        const pushY = ny * penetration * CONFIG.POSITIONAL_CORRECTION * sideSign;
-        
-        b.x += pushX;
-        b.y += pushY;
-        
-        // Dampen velocity in the direction of the wall normal
-        const velDot = b.vx * nx + b.vy * ny;
-        if (velDot * sideSign < 0) {
-            // Moving into wall - use stronger damping to reduce bounce and jitter
-            const bounce = 1 - CONFIG.ELASTICITY;
-            b.vx -= velDot * nx * bounce * 0.85; // Extra damping factor
-            b.vy -= velDot * ny * bounce * 0.85;
+    if (dist < minDist && dist > 0.1) {
+        const nx = dx / dist;
+        const ny = dy / dist;
+        const push = minDist - dist + 1;
+        b.x += nx * push;
+        b.y += ny * push;
+        const dot = b.vx * nx + b.vy * ny;
+        if (dot < 0) { b.vx -= dot * nx * 0.9; b.vy -= dot * ny * 0.9; }
+    }
+}
+
+function collideBoundary(b, radius, hw) {
+    const dx = b.x - centerX;
+    const dy = b.y - centerY;
+    const dist = Math.hypot(dx, dy);
+    const maxDist = radius - hw - b.r;
+    
+    if (dist > maxDist) {
+        const nx = dx / dist;
+        const ny = dy / dist;
+        b.x = centerX + nx * (maxDist - 1);
+        b.y = centerY + ny * (maxDist - 1);
+        const dot = b.vx * nx + b.vy * ny;
+        if (dot > 0) { b.vx -= dot * nx * 1.2; b.vy -= dot * ny * 1.2; }
+    }
+}
+
+function resolveBallCollisions() {
+    for (let i = 0; i < balls.length; i++) {
+        for (let j = i + 1; j < balls.length; j++) {
+            const b1 = balls[i];
+            const b2 = balls[j];
+            
+            const dx = b2.x - b1.x;
+            const dy = b2.y - b1.y;
+            const dist = Math.hypot(dx, dy);
+            const minDist = b1.r + b2.r;
+            
+            if (dist < minDist && dist > 0.01) {
+                const nx = dx / dist;
+                const ny = dy / dist;
+                const overlap = (minDist - dist) / 2 + 1;
+                
+                b1.x -= nx * overlap;
+                b1.y -= ny * overlap;
+                b2.x += nx * overlap;
+                b2.y += ny * overlap;
+                
+                const dvx = b2.vx - b1.vx;
+                const dvy = b2.vy - b1.vy;
+                const dvn = dvx * nx + dvy * ny;
+                
+                if (dvn < 0) {
+                    b1.vx += dvn * nx * 0.5;
+                    b1.vy += dvn * ny * 0.5;
+                    b2.vx -= dvn * nx * 0.5;
+                    b2.vy -= dvn * ny * 0.5;
+                }
+            }
         }
     }
 }
 
-function solveBallCollision(b1, b2) {
-    /**
-     * Handle ball-to-ball collision
-     * Prevents overlapping and keeps all 4 balls visible and separated
-     */
-    const dx = b2.x - b1.x;
-    const dy = b2.y - b1.y;
-    const distSq = dx * dx + dy * dy;
-    const minDist = b1.radius + b2.radius;
-    const minDistSq = minDist * minDist;
-    
-    // If balls are not touching, skip
-    if (distSq > minDistSq || distSq < 0.01) return;
-    
-    const dist = Math.sqrt(distSq);
-    const nx = dx / dist;  // Normal vector from b1 to b2
-    const ny = dy / dist;
-    
-    // Separate overlapping balls
-    const penetration = minDist - dist;
-    const separationAmount = penetration / 2 + 0.5; // Extra margin to prevent re-overlap
-    
-    b1.x -= nx * separationAmount;
-    b1.y -= ny * separationAmount;
-    b2.x += nx * separationAmount;
-    b2.y += ny * separationAmount;
-    
-    // Calculate relative velocity
-    const dvx = b2.vx - b1.vx;
-    const dvy = b2.vy - b1.vy;
-    
-    // Relative velocity along collision normal
-    const dvn = dvx * nx + dvy * ny;
-    
-    // Only resolve if balls are moving towards each other
-    if (dvn < 0) {
-        // Elastic collision with equal mass
-        const impulse = -dvn; // For equal mass, equal and opposite impulse
-        
-        b1.vx -= impulse * nx * 0.5;
-        b1.vy -= impulse * ny * 0.5;
-        b2.vx += impulse * nx * 0.5;
-        b2.vy += impulse * ny * 0.5;
-    }
-}
-
-function isAngleBetween(angle, start, end) {
-    /**
-     * Check if an angle falls within a start-to-end arc
-     * Handles wraparound correctly
-     */
-    // Normalize all angles to 0-2PI
+function isAngleInRange(angle, start, end) {
     const a = ((angle % PI2) + PI2) % PI2;
     const s = ((start % PI2) + PI2) % PI2;
     const e = ((end % PI2) + PI2) % PI2;
     
-    if (s < e) {
-        // Normal case (no wraparound)
+    if (s <= e) {
         return a >= s && a <= e;
     } else {
-        // Wraparound case (e.g., 350° to 10°)
         return a >= s || a <= e;
     }
 }
 
-function calculateRadialPenetration(dist, inner, outer, ballR) {
-    /**
-     * Calculate how much the ball penetrates the wall
-     * Returns positive value if penetrating
-     */
-    if (dist < inner) {
-        // Ball is inside the ring
-        return (inner + ballR) - dist;
-    } else if (dist > outer) {
-        // Ball is outside the ring
-        return (outer - ballR + ballR) - dist;
-    } else {
-        // Ball is in the wall zone - calculate penetration
-        const distToInner = dist - inner;
-        const distToOuter = outer - dist;
-        
-        if (distToInner < distToOuter) {
-            // Closer to inner edge
-            return ballR - distToInner;
-        } else {
-            // Closer to outer edge
-            return ballR - distToOuter;
-        }
-    }
-}
-
-function checkCapCollision(b, r, angle) {
-    /**
-     * Check collision with the wall end caps (rounded wall edges at gap)
-     * Treats them as circular obstacles
-     */
-    const capX = centerX + Math.cos(angle) * r;
-    const capY = centerY + Math.sin(angle) * r;
-    
-    const dx = b.x - capX;
-    const dy = b.y - capY;
-    const distSq = dx * dx + dy * dy;
-    const capRadius = CONFIG.WALL_WIDTH / 2;
-    const minDist = capRadius + b.radius;
-    
-    if (distSq < minDist * minDist && distSq > 0.01) {
-        const dist = Math.sqrt(distSq);
-        const nx = dx / dist;
-        const ny = dy / dist;
-        
-        const penetration = minDist - dist;
-        
-        // Separate
-        b.x += nx * penetration * CONFIG.POSITIONAL_CORRECTION;
-        b.y += ny * penetration * CONFIG.POSITIONAL_CORRECTION;
-        
-        // Dampen velocity (touching cap)
-        const velDot = b.vx * nx + b.vy * ny;
-        if (velDot < 0) {
-            b.vx -= velDot * nx * 0.5;
-            b.vy -= velDot * ny * 0.5;
-        }
-    }
-}
-
 function checkWin() {
-    // Goal Zone - the center green area (much larger for easier access)
-    // Using RINGS - 1 instead of RINGS + 2 makes it significantly larger
-    const goalR = maxRadius / (CONFIG.RINGS - 0.5);
     let count = 0;
-    
     balls.forEach(b => {
-        const d = Math.sqrt((b.x - centerX)**2 + (b.y - centerY)**2);
-        if(d < goalR) count++;
+        const d = Math.hypot(b.x - centerX, b.y - centerY);
+        if (d < goalRadius * 0.9) {
+            count++;
+            b.inGoal = true;
+        } else {
+            b.inGoal = false;
+        }
     });
     
-    // Update HUD with balls in goal
-    const ballsInGoalText = `${count}/${CONFIG.BALL_COUNT} Balls Secured`;
-    document.getElementById('timerBadge').innerText = gameState.timeStr + " | " + ballsInGoalText;
+    const elapsed = Date.now() - gameState.startTime;
+    gameState.timeStr = formatTime(elapsed);
+    document.getElementById('timerBadge').innerText = `${gameState.timeStr} | ${count}/${CONFIG.BALL_COUNT} ⚪`;
     
-    // Win when all balls reach goal
-    if(count === CONFIG.BALL_COUNT && !gameState.won) {
+    if (count === CONFIG.BALL_COUNT && !gameState.won) {
         gameState.won = true;
         gameState.playing = false;
-        
-        const elapsed = Date.now() - gameState.startTime;
-        const finalStr = formatTime(elapsed);
-        document.getElementById('finalTime').innerText = finalStr;
-        
-        // Show win screen with delay for visual feedback
-        setTimeout(() => {
-            document.getElementById('winScreen').classList.remove('hidden');
-        }, 300);
+        document.getElementById('finalTime').innerText = gameState.timeStr;
+        setTimeout(() => document.getElementById('winScreen').classList.remove('hidden'), 400);
     }
 }
 
-/**
- * --- RENDERING ---
- */
 function loop() {
-    // 1. Logic
     updatePhysics();
-    updateTimer();
-
-    // 2. Render
-    ctx.clearRect(0,0,width,height);
-    
-    drawBoard();
-    drawMaze();
-    drawBalls();
-
+    render();
     requestAnimationFrame(loop);
 }
 
-function drawBoard() {
-    // Wood Texture Background
-    const grad = ctx.createRadialGradient(centerX, centerY, 10, centerX, centerY, maxRadius*1.2);
-    grad.addColorStop(0, '#eecfa1');
-    grad.addColorStop(1, '#8d6e63');
+function render() {
+    // Wood background
+    const bgGrad = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, maxRadius * 1.1);
+    bgGrad.addColorStop(0, '#f0e0c8');
+    bgGrad.addColorStop(0.6, '#dcc8a8');
+    bgGrad.addColorStop(1, '#c8b090');
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, width, height);
     
-    ctx.fillStyle = grad;
-    ctx.fillRect(0,0,width,height);
+    // Wood grain
+    ctx.strokeStyle = 'rgba(139, 90, 43, 0.05)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 40; i++) {
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, 8 + i * 12, 0, PI2);
+        ctx.stroke();
+    }
     
-    // Goal Hole (larger for easier access)
-    const goalRadius = maxRadius / (CONFIG.RINGS - 0.5);
+    // Goal hole
     ctx.beginPath();
     ctx.arc(centerX, centerY, goalRadius, 0, PI2);
-    ctx.fillStyle = '#1b5e20';
+    const goalGrad = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, goalRadius);
+    goalGrad.addColorStop(0, '#0d2d0d');
+    goalGrad.addColorStop(0.6, '#1a4a1a');
+    goalGrad.addColorStop(1, '#0f3a0f');
+    ctx.fillStyle = goalGrad;
     ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#082008';
+    ctx.lineWidth = 3;
     ctx.stroke();
-    // Inner Shadow of hole
-    ctx.shadowBlur = 10;
-    ctx.shadowColor = 'black';
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-}
-
-function drawMaze() {
-    // Drop Shadow for Walls (creates depth)
-    ctx.shadowColor = 'rgba(0,0,0,0.4)';
-    ctx.shadowBlur = 6;
-    ctx.shadowOffsetX = 2;
-    ctx.shadowOffsetY = 4;
-
+    
+    // Walls
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    
     walls.forEach(w => {
-        ctx.beginPath();
-        
         if (w.type === 'arc') {
-            // CONCENTRIC RING WALLS
-            ctx.arc(centerX, centerY, w.radius, w.startAngle, w.endAngle);
-            ctx.lineWidth = w.width;
-            ctx.lineCap = 'round';
-            ctx.strokeStyle = '#4e342e';
-            ctx.stroke();
-            
-            // Inner highlight for 3D effect
             ctx.beginPath();
             ctx.arc(centerX, centerY, w.radius, w.startAngle, w.endAngle);
-            ctx.lineWidth = w.width - 4;
-            ctx.strokeStyle = '#6d4c41';
+            ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+            ctx.lineWidth = CONFIG.WALL_WIDTH + 4;
             ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, w.radius, w.startAngle, w.endAngle);
+            ctx.strokeStyle = '#6d4c41';
+            ctx.lineWidth = CONFIG.WALL_WIDTH;
+            ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, w.radius, w.startAngle, w.endAngle);
+            ctx.strokeStyle = '#9d7c61';
+            ctx.lineWidth = CONFIG.WALL_WIDTH - 2;
+            ctx.stroke();
+            
         } else if (w.type === 'radial') {
-            // RADIAL BLOCKING WALLS
             const x1 = centerX + Math.cos(w.angle) * w.innerR;
             const y1 = centerY + Math.sin(w.angle) * w.innerR;
             const x2 = centerX + Math.cos(w.angle) * w.outerR;
             const y2 = centerY + Math.sin(w.angle) * w.outerR;
             
-            // Main wall line
-            ctx.lineWidth = w.width;
-            ctx.lineCap = 'round';
-            ctx.strokeStyle = '#4e342e';
+            ctx.beginPath();
             ctx.moveTo(x1, y1);
             ctx.lineTo(x2, y2);
+            ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+            ctx.lineWidth = CONFIG.WALL_WIDTH + 4;
             ctx.stroke();
             
-            // Highlight
             ctx.beginPath();
-            ctx.lineWidth = w.width - 4;
-            ctx.strokeStyle = '#6d4c41';
             ctx.moveTo(x1, y1);
             ctx.lineTo(x2, y2);
+            ctx.strokeStyle = '#6d4c41';
+            ctx.lineWidth = CONFIG.WALL_WIDTH;
+            ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.strokeStyle = '#9d7c61';
+            ctx.lineWidth = CONFIG.WALL_WIDTH - 2;
+            ctx.stroke();
+            
+        } else if (w.type === 'boundary') {
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, w.radius, 0, PI2);
+            ctx.strokeStyle = '#4e342e';
+            ctx.lineWidth = CONFIG.WALL_WIDTH * 2;
+            ctx.stroke();
+            ctx.strokeStyle = '#6d4c41';
+            ctx.lineWidth = CONFIG.WALL_WIDTH * 2 - 4;
             ctx.stroke();
         }
     });
-
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 0;
-}
-
-function drawBalls() {
+    
+    // Balls
     balls.forEach(b => {
-        // Drop Shadow
+        // Shadow
         ctx.beginPath();
-        ctx.arc(b.x + 2, b.y + 4, b.radius, 0, PI2);
+        ctx.arc(b.x + 2, b.y + 3, b.r, 0, PI2);
         ctx.fillStyle = 'rgba(0,0,0,0.3)';
         ctx.fill();
-
-        // Ball Body
+        
+        // Ball
         ctx.beginPath();
-        ctx.arc(b.x, b.y, b.radius, 0, PI2);
-        
-        // Metallic Gradient
-        const grad = ctx.createRadialGradient(
-            b.x - b.radius*0.3, b.y - b.radius*0.3, b.radius*0.1, 
-            b.x, b.y, b.radius
+        ctx.arc(b.x, b.y, b.r, 0, PI2);
+        const ballGrad = ctx.createRadialGradient(
+            b.x - b.r * 0.3, b.y - b.r * 0.3, 0,
+            b.x, b.y, b.r
         );
-        grad.addColorStop(0, '#ffffff');
-        grad.addColorStop(0.4, '#cfd8dc');
-        grad.addColorStop(1, '#546e7a');
-        
-        ctx.fillStyle = grad;
+        ballGrad.addColorStop(0, '#ffffff');
+        ballGrad.addColorStop(0.15, '#f8f8f8');
+        ballGrad.addColorStop(0.5, '#b8c8d8');
+        ballGrad.addColorStop(1, b.inGoal ? '#4a7a4a' : '#607080');
+        ctx.fillStyle = ballGrad;
         ctx.fill();
         
         // Shine
-        ctx.fillStyle = 'white';
         ctx.beginPath();
-        ctx.arc(b.x - b.radius*0.3, b.y - b.radius*0.3, 2, 0, PI2);
+        ctx.arc(b.x - b.r * 0.35, b.y - b.r * 0.35, b.r * 0.22, 0, PI2);
+        ctx.fillStyle = 'rgba(255,255,255,0.95)';
         ctx.fill();
     });
-}
-
-function updateTimer() {
-    if(!gameState.playing) return;
-    const elapsed = Date.now() - gameState.startTime;
-    gameState.timeStr = formatTime(elapsed);
-    // Updated in checkWin() to show ball progress
 }
 
 function formatTime(ms) {
     const s = Math.floor(ms / 1000);
     const m = Math.floor(s / 60);
-    const remS = s % 60;
-    return `${m < 10 ? '0'+m : m}:${remS < 10 ? '0'+remS : remS}`;
+    return `${m.toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
 }
 
-/**
- * --- IOS PERMISSIONS ---
- */
 function requestPermissions() {
-    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+    if (typeof DeviceOrientationEvent !== 'undefined' && 
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
         DeviceOrientationEvent.requestPermission()
-            .then(state => {
-                if (state === 'granted') startGame();
-                else alert('Tilt controls are required to play.');
-            })
-            .catch(console.error);
+            .then(state => { if (state === 'granted') startGame(); else startGame(); })
+            .catch(() => startGame());
     } else {
         startGame();
     }
 }
 
-// Boot
 init();
 </script>
 </body>
