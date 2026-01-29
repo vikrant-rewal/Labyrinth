@@ -118,8 +118,8 @@
     </div>
 
     <div id="winScreen" class="overlay hidden">
-        <h1 style="color:#81c784">Success</h1>
-        <p>All balls secured in <span id="finalTime" style="color:white; font-weight:bold;"></span></p>
+        <h1 style="color:#81c784">All Balls Secured!</h1>
+        <p>Completed in <span id="finalTime" style="color:white; font-weight:bold;"></span></p>
         <button id="btnRestart">Play Again</button>
     </div>
 
@@ -128,18 +128,20 @@
 <script>
 /**
  * --- PHYSICS CONFIGURATION ---
- * Adjust these to tune the "Feel" of the game
+ * Tuned for smooth mobile gameplay without jitter or tunneling
  */
 const CONFIG = {
     RINGS: 7,               // Number of concentric walls
     BALL_COUNT: 4,          
     WALL_WIDTH: 14,         // Thickness of walls (pixels)
     BALL_RADIUS: 8,         // Radius of ball (pixels)
-    FRICTION: 0.96,         // Air resistance (Lower = slide more)
-    ELASTICITY: 0.4,        // Bounciness (0 = no bounce, 1 = super ball)
-    TILT_SENSITIVITY: 0.04, // How much tilt affects force
-    SUB_STEPS: 8,           // Physics steps per frame (Higher = Anti-tunneling)
-    INPUT_SMOOTHING: 0.15   // Low pass filter for accelerometer (0.1 = very smooth/laggy, 1.0 = raw)
+    FRICTION: 0.95,         // Velocity damping per frame (lower = more slide)
+    ELASTICITY: 0.15,       // Bounciness on wall hit (very low to reduce jitter)
+    TILT_SENSITIVITY: 0.015, // Very low sensitivity to avoid overshooting
+    SUB_STEPS: 6,           // Physics steps per frame for collision detection
+    INPUT_SMOOTHING: 0.6,   // Accelerometer smoothing (higher = less jittery, more responsive)
+    MAX_VELOCITY: 4.5,      // Cap velocity to prevent overshoots
+    POSITIONAL_CORRECTION: 0.8 // How aggressively to correct penetrations
 };
 
 // --- SYSTEM GLOBALS ---
@@ -205,31 +207,71 @@ function generateLevel() {
     walls = [];
     const step = maxRadius / (CONFIG.RINGS + 1);
 
-    // Generate Concentric Rings with Openings
+    // Create a proper maze pattern using a systematic approach
+    // Gap pattern: Each ring has one gap positioned strategically
+    const gapPattern = [];
+    
+    // Generate ring gaps in a spiral pattern for visual coherence
+    for (let i = 0; i < CONFIG.RINGS; i++) {
+        // Progressively rotate the gap position as we go inward
+        // This creates a nice spiral effect and forces navigation
+        const baseAngle = (i / CONFIG.RINGS) * PI2;
+        const rotationFactor = (i / CONFIG.RINGS) * PI2 * 2; // 2 full rotations
+        const gapAngle = baseAngle + rotationFactor;
+        
+        gapPattern.push({
+            ringIndex: i + 1,
+            gapAngle: gapAngle,
+            gapSize: (35 * Math.PI) / 180 // Consistent gap size: 35 degrees
+        });
+    }
+
+    // 1. CONCENTRIC RINGS (with consistent gaps)
     for (let i = 1; i <= CONFIG.RINGS; i++) {
         const r = i * step;
+        const gapInfo = gapPattern[i - 1];
         
-        // Random Gap
-        // Gap size gets slightly larger as we go out
-        const gapSizeDeg = 45 + (Math.random() * 30); 
-        const gapSizeRad = (gapSizeDeg * Math.PI) / 180;
-        const gapAngle = Math.random() * PI2;
+        const gapAngle = gapInfo.gapAngle;
+        const gapSize = gapInfo.gapSize;
 
-        // We define a wall as an ARC that goes from A to B.
-        // To make a ring with a gap, the wall goes from (GapEnd) around to (GapStart)
-        const start = gapAngle + gapSizeRad/2;
-        const end = gapAngle + PI2 - gapSizeRad/2;
+        // Arc wall: from gap-end around to gap-start
+        const start = gapAngle + gapSize / 2;
+        const end = gapAngle + PI2 - gapSize / 2;
 
         walls.push({
             type: 'arc',
             radius: r,
-            startAngle: start, // Normalized in physics loop
+            startAngle: start,
             endAngle: end,
             width: CONFIG.WALL_WIDTH
         });
     }
 
-    // Outer Boundary Ring (Solid)
+    // 2. RADIAL BLOCKING WALLS (Dead ends between rings)
+    // Creates a proper maze structure that blocks direct paths
+    for (let i = 1; i < CONFIG.RINGS; i++) {
+        const innerR = i * step;
+        const outerR = (i + 1) * step;
+        const midR = (innerR + outerR) / 2;
+
+        // Add 2-3 radial walls per ring gap, positioned to create dead ends
+        const barrierCount = 2 + (i % 2); // Varies between 2 and 3
+        
+        for (let b = 0; b < barrierCount; b++) {
+            // Position barriers away from the ring gaps to create proper obstacles
+            const barrierAngle = gapPattern[i-1].gapAngle + gapPattern[i-1].gapSize + (b * PI2 / (barrierCount + 1)) + (PI2 / 8);
+            
+            walls.push({
+                type: 'radial',
+                angle: barrierAngle,
+                innerR: innerR,
+                outerR: outerR,
+                width: CONFIG.WALL_WIDTH
+            });
+        }
+    }
+
+    // 3. OUTER BOUNDARY RING (Solid)
     walls.push({
         type: 'arc',
         radius: maxRadius,
@@ -291,32 +333,43 @@ function handleOrientation(e) {
 function updatePhysics() {
     if(!gameState.playing) return;
 
-    // 1. Smooth Input (Low Pass Filter)
+    // 1. Smooth Accelerometer Input (Low Pass Filter)
+    // Higher value = more responsive but jerkier
     input.x += (targetInput.x - input.x) * CONFIG.INPUT_SMOOTHING;
     input.y += (targetInput.y - input.y) * CONFIG.INPUT_SMOOTHING;
 
-    // Calculate Gravity Force based on tilt
+    // Calculate gravity force based on tilt
+    // Very low sensitivity to prevent aggressive movement
     const gx = input.x * CONFIG.TILT_SENSITIVITY;
     const gy = input.y * CONFIG.TILT_SENSITIVITY;
 
-    // 2. Sub-Stepping Loop
-    // This runs physics N times per frame to catch collisions at high speeds
-    for(let step=0; step<CONFIG.SUB_STEPS; step++) {
-        
+    // 2. Sub-Stepping Physics Loop
+    // Runs physics multiple times per frame for better collision detection
+    const dtSubstep = 1 / (60 * CONFIG.SUB_STEPS);
+    
+    for(let step = 0; step < CONFIG.SUB_STEPS; step++) {
         balls.forEach(b => {
-            // Apply Forces
-            b.vx += gx;
-            b.vy += gy;
+            // 2a. Apply Forces
+            b.vx += gx * 0.5; // Scaled down further
+            b.vy += gy * 0.5;
             
-            // Friction
+            // 2b. Clamp Velocity (prevent overshooting)
+            const speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+            if (speed > CONFIG.MAX_VELOCITY) {
+                const scale = CONFIG.MAX_VELOCITY / speed;
+                b.vx *= scale;
+                b.vy *= scale;
+            }
+            
+            // 2c. Friction/Damping
             b.vx *= CONFIG.FRICTION;
             b.vy *= CONFIG.FRICTION;
 
-            // Tentative Movement
+            // 2d. Position Update
             b.x += b.vx;
             b.y += b.vy;
 
-            // Solve Constraints
+            // 2e. Solve Collisions & Constraints
             solveCollisions(b);
         });
     }
@@ -326,128 +379,242 @@ function updatePhysics() {
 }
 
 function solveCollisions(b) {
-    // We only resolve Wall collisions here. 
-    // Ball-to-Ball collision is omitted to keep game "clean" and focused on maze solving.
+    /**
+     * IMPROVED COLLISION DETECTION & RESPONSE
+     * Uses proper geometric tests to prevent penetration
+     * Handles both arc and radial walls
+     */
+    const halfWall = CONFIG.WALL_WIDTH / 2;
+    const ballR = b.radius;
 
+    // 1. BOUNDARY ENFORCEMENT - Keep balls from leaving the board
+    const dx = b.x - centerX;
+    const dy = b.y - centerY;
+    const distFromCenter = Math.sqrt(dx * dx + dy * dy);
+    const boundaryRadius = maxRadius * 0.95;
+    
+    if (distFromCenter > boundaryRadius - ballR) {
+        // Push ball back inside
+        const angle = Math.atan2(dy, dx);
+        const correctedDist = boundaryRadius - ballR;
+        b.x = centerX + Math.cos(angle) * correctedDist;
+        b.y = centerY + Math.sin(angle) * correctedDist;
+        
+        // Kill outward velocity
+        const nx = Math.cos(angle);
+        const ny = Math.sin(angle);
+        const velDot = b.vx * nx + b.vy * ny;
+        if (velDot > 0) {
+            b.vx -= velDot * nx;
+            b.vy -= velDot * ny;
+        }
+    }
+
+    // 2. COLLISION WITH WALLS
     walls.forEach(w => {
-        // Distance from center
-        const dx = b.x - centerX;
-        const dy = b.y - centerY;
-        const dist = Math.sqrt(dx*dx + dy*dy);
-        
-        // 1. Broad Phase: Is ball close to the Ring's radius?
-        const halfWall = w.width / 2;
-        const ballR = b.radius;
-        
-        if (dist >= w.radius - halfWall - ballR && dist <= w.radius + halfWall + ballR) {
-            
-            // 2. Narrow Phase: Angle Check
-            let angle = Math.atan2(dy, dx);
-            if (angle < 0) angle += PI2; // Normalize 0 to 2PI
-
-            // Check if this angle is within the wall's arc
-            // We need to handle the wrapping case (e.g. wall goes from 350deg to 10deg)
-            let inWall = false;
-            
-            // Normalize wall start/end to 0-2PI
-            const start = normalizeAngle(w.startAngle);
-            const end = normalizeAngle(w.endAngle);
-
-            if (start < end) {
-                // Normal case
-                if (angle >= start && angle <= end) inWall = true;
-            } else {
-                // Wrapping case
-                if (angle >= start || angle <= end) inWall = true;
-            }
-
-            if (inWall) {
-                // COLLISION WITH FACE OF WALL
-                // Push ball out along the Normal (Radial Vector)
-                // Determine which side of the wall is closer
-                const distToInner = Math.abs(dist - (w.radius - halfWall));
-                const distToOuter = Math.abs(dist - (w.radius + halfWall));
-                
-                // Normal vector (normalized)
-                const nx = dx / dist;
-                const ny = dy / dist;
-
-                if (dist < w.radius) {
-                    // Inside the ring, push inwards towards center
-                    // Wait, if dist < radius, we are on the inner side. Push IN? 
-                    // No, push OUT of the wall geometry.
-                    // If ball is at radius 90, and wall inner edge is 95. Push to 90.
-                    
-                    const pen = (w.radius - halfWall - ballR) - dist;
-                    // Actually simpler: Push towards center if closer to inner, away if closer to outer?
-                    // No, just push away from the wall core.
-                    
-                    // If dist < w.radius, we are "inside" the ring physically.
-                    // Push vector is -Normal.
-                    const overlap = (ballR + halfWall) - Math.abs(dist - w.radius);
-                    
-                    // Direction: Are we closer to inner or outer edge?
-                    if (dist < w.radius) {
-                        // Push Inwards (decrease radius)
-                        b.x -= nx * overlap;
-                        b.y -= ny * overlap;
-                        reflect(b, nx, ny);
-                    } else {
-                        // Push Outwards (increase radius)
-                        b.x += nx * overlap;
-                        b.y += ny * overlap;
-                        reflect(b, -nx, -ny);
-                    }
-                }
-            } else {
-                // COLLISION WITH END CAPS (The "Tips" of the wall at the gap)
-                // We check collision against two circles placed at start and end of arc
-                checkCapCollision(b, w.radius, w.startAngle);
-                checkCapCollision(b, w.radius, w.endAngle);
-            }
+        if (w.type === 'arc') {
+            collideWithArcWall(b, w, halfWall);
+        } else if (w.type === 'radial') {
+            collideWithRadialWall(b, w, halfWall);
         }
     });
 }
 
-function checkCapCollision(b, r, angle) {
-    // Calculate position of the wall tip
-    const capX = centerX + Math.cos(angle) * r;
-    const capY = centerY + Math.sin(angle) * r;
+function collideWithArcWall(b, w, halfWall) {
+    /**
+     * Collision detection for concentric ring walls
+     */
+    const ballR = b.radius;
     
-    // Determine distance from ball to Tip
-    const distSq = (b.x - capX)**2 + (b.y - capY)**2;
-    const minDist = CONFIG.WALL_WIDTH/2 + b.radius;
+    // Get vector from center to ball
+    const dx = b.x - centerX;
+    const dy = b.y - centerY;
+    const distSq = dx * dx + dy * dy;
+    const dist = Math.sqrt(distSq);
     
-    if (distSq < minDist**2) {
-        const dist = Math.sqrt(distSq);
-        // Normal vector from Cap to Ball
-        const nx = (b.x - capX) / dist;
-        const ny = (b.y - capY) / dist;
+    // Skip if too far away
+    const maxCheck = w.radius + halfWall + ballR + 20;
+    if (dist > maxCheck) return;
+
+    // Check if ball is in the wall's radial zone
+    const inner = w.radius - halfWall;
+    const outer = w.radius + halfWall;
+    
+    if (dist < inner - ballR || dist > outer + ballR) {
+        return; // Too far in any direction
+    }
+
+    // Get ball's angle
+    let ballAngle = Math.atan2(dy, dx);
+    if (ballAngle < 0) ballAngle += PI2;
+
+    // Check if angle is within the wall's angular range
+    const angleInWall = isAngleBetween(ballAngle, w.startAngle, w.endAngle);
+
+    if (angleInWall) {
+        // Ball is within the angular range of the wall
+        const penetration = calculateRadialPenetration(dist, inner, outer, ballR);
         
-        const overlap = minDist - dist;
-        
-        // Push ball away
-        b.x += nx * overlap;
-        b.y += ny * overlap;
-        
-        reflect(b, nx, ny);
+        if (penetration > 0) {
+            // COLLISION! Push ball out
+            const nx = dx / dist;
+            const ny = dy / dist;
+            const correctionDir = dist < w.radius ? -1 : 1;
+            const correction = penetration * CONFIG.POSITIONAL_CORRECTION;
+            
+            b.x += nx * correction * correctionDir;
+            b.y += ny * correction * correctionDir;
+
+            // Dampen velocity
+            const velocityDot = b.vx * nx + b.vy * ny;
+            if ((velocityDot > 0 && correctionDir > 0) || (velocityDot < 0 && correctionDir < 0)) {
+                b.vx -= velocityDot * nx * (1 - CONFIG.ELASTICITY);
+                b.vy -= velocityDot * ny * (1 - CONFIG.ELASTICITY);
+            }
+        }
+    } else {
+        // Check collision with wall end caps
+        checkCapCollision(b, w.radius, w.startAngle);
+        checkCapCollision(b, w.radius, w.endAngle);
     }
 }
 
-function reflect(b, nx, ny) {
-    // Reflect velocity vector V around Normal N
-    // V_new = V - 2(V dot N)N
-    const dot = b.vx * nx + b.vy * ny;
+function collideWithRadialWall(b, w, halfWall) {
+    /**
+     * Collision detection for radial blocking walls (dead ends)
+     */
+    const ballR = b.radius;
     
-    // Only bounce if moving INTO the wall
-    if (dot < 0) {
-        b.vx = (b.vx - 2 * dot * nx) * CONFIG.ELASTICITY;
-        b.vy = (b.vy - 2 * dot * ny) * CONFIG.ELASTICITY;
+    // Radial wall is a line from angle w.angle, from innerR to outerR
+    const wallAngle = w.angle;
+    const wallX = Math.cos(wallAngle);
+    const wallY = Math.sin(wallAngle);
+    
+    // Normal to wall (perpendicular)
+    const nx = -wallY;
+    const ny = wallX;
+    
+    // Vector from wall origin to ball
+    const dx = b.x - centerX;
+    const dy = b.y - centerY;
+    
+    // Distance from ball to the infinite line defined by wall angle
+    const distToLine = Math.abs(dx * nx + dy * ny);
+    
+    // Only check if ball is close to the wall
+    if (distToLine > ballR + halfWall) return;
+    
+    // Check if ball is within the radial extent of the wall
+    const radialDist = dx * wallX + dy * wallY;
+    
+    if (radialDist < w.innerR - ballR || radialDist > w.outerR + ballR) {
+        return; // Outside radial bounds
+    }
+    
+    // Ball is hitting the wall
+    // Determine which side of the wall
+    const sideSign = (dx * nx + dy * ny) > 0 ? 1 : -1;
+    const penetration = ballR + halfWall - distToLine;
+    
+    if (penetration > 0) {
+        // Push ball away from wall
+        const pushX = nx * penetration * CONFIG.POSITIONAL_CORRECTION * sideSign;
+        const pushY = ny * penetration * CONFIG.POSITIONAL_CORRECTION * sideSign;
+        
+        b.x += pushX;
+        b.y += pushY;
+        
+        // Dampen velocity in the direction of the wall normal
+        const velDot = b.vx * nx + b.vy * ny;
+        if (velDot * sideSign < 0) {
+            // Moving into wall
+            b.vx -= velDot * nx * (1 - CONFIG.ELASTICITY);
+            b.vy -= velDot * ny * (1 - CONFIG.ELASTICITY);
+        }
+    }
+}
+
+function isAngleBetween(angle, start, end) {
+    /**
+     * Check if an angle falls within a start-to-end arc
+     * Handles wraparound correctly
+     */
+    // Normalize all angles to 0-2PI
+    const a = ((angle % PI2) + PI2) % PI2;
+    const s = ((start % PI2) + PI2) % PI2;
+    const e = ((end % PI2) + PI2) % PI2;
+    
+    if (s < e) {
+        // Normal case (no wraparound)
+        return a >= s && a <= e;
+    } else {
+        // Wraparound case (e.g., 350° to 10°)
+        return a >= s || a <= e;
+    }
+}
+
+function calculateRadialPenetration(dist, inner, outer, ballR) {
+    /**
+     * Calculate how much the ball penetrates the wall
+     * Returns positive value if penetrating
+     */
+    if (dist < inner) {
+        // Ball is inside the ring
+        return (inner + ballR) - dist;
+    } else if (dist > outer) {
+        // Ball is outside the ring
+        return (outer - ballR + ballR) - dist;
+    } else {
+        // Ball is in the wall zone - calculate penetration
+        const distToInner = dist - inner;
+        const distToOuter = outer - dist;
+        
+        if (distToInner < distToOuter) {
+            // Closer to inner edge
+            return ballR - distToInner;
+        } else {
+            // Closer to outer edge
+            return ballR - distToOuter;
+        }
+    }
+}
+
+function checkCapCollision(b, r, angle) {
+    /**
+     * Check collision with the wall end caps (rounded wall edges at gap)
+     * Treats them as circular obstacles
+     */
+    const capX = centerX + Math.cos(angle) * r;
+    const capY = centerY + Math.sin(angle) * r;
+    
+    const dx = b.x - capX;
+    const dy = b.y - capY;
+    const distSq = dx * dx + dy * dy;
+    const capRadius = CONFIG.WALL_WIDTH / 2;
+    const minDist = capRadius + b.radius;
+    
+    if (distSq < minDist * minDist && distSq > 0.01) {
+        const dist = Math.sqrt(distSq);
+        const nx = dx / dist;
+        const ny = dy / dist;
+        
+        const penetration = minDist - dist;
+        
+        // Separate
+        b.x += nx * penetration * CONFIG.POSITIONAL_CORRECTION;
+        b.y += ny * penetration * CONFIG.POSITIONAL_CORRECTION;
+        
+        // Dampen velocity (touching cap)
+        const velDot = b.vx * nx + b.vy * ny;
+        if (velDot < 0) {
+            b.vx -= velDot * nx * 0.5;
+            b.vy -= velDot * ny * 0.5;
+        }
     }
 }
 
 function checkWin() {
-    // Goal Zone
+    // Goal Zone - the center green area
     const goalR = maxRadius / (CONFIG.RINGS + 2);
     let count = 0;
     
@@ -456,6 +623,11 @@ function checkWin() {
         if(d < goalR) count++;
     });
     
+    // Update HUD with balls in goal
+    const ballsInGoalText = `${count}/${CONFIG.BALL_COUNT} Balls Secured`;
+    document.getElementById('timerBadge').innerText = gameState.timeStr + " | " + ballsInGoalText;
+    
+    // Win when all balls reach goal
     if(count === CONFIG.BALL_COUNT && !gameState.won) {
         gameState.won = true;
         gameState.playing = false;
@@ -463,7 +635,11 @@ function checkWin() {
         const elapsed = Date.now() - gameState.startTime;
         const finalStr = formatTime(elapsed);
         document.getElementById('finalTime').innerText = finalStr;
-        document.getElementById('winScreen').classList.remove('hidden');
+        
+        // Show win screen with delay for visual feedback
+        setTimeout(() => {
+            document.getElementById('winScreen').classList.remove('hidden');
+        }, 300);
     }
 }
 
@@ -510,9 +686,6 @@ function drawBoard() {
 }
 
 function drawMaze() {
-    // Walls
-    ctx.lineCap = 'round'; // Rounds the ends of the walls visually
-    
     // Drop Shadow for Walls (creates depth)
     ctx.shadowColor = 'rgba(0,0,0,0.4)';
     ctx.shadowBlur = 6;
@@ -521,17 +694,44 @@ function drawMaze() {
 
     walls.forEach(w => {
         ctx.beginPath();
-        ctx.arc(centerX, centerY, w.radius, w.startAngle, w.endAngle);
-        ctx.lineWidth = w.width;
-        ctx.strokeStyle = '#4e342e';
-        ctx.stroke();
         
-        // Inner highlight for 3D effect on wall top
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, w.radius, w.startAngle, w.endAngle);
-        ctx.lineWidth = w.width - 4;
-        ctx.strokeStyle = '#6d4c41';
-        ctx.stroke();
+        if (w.type === 'arc') {
+            // CONCENTRIC RING WALLS
+            ctx.arc(centerX, centerY, w.radius, w.startAngle, w.endAngle);
+            ctx.lineWidth = w.width;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = '#4e342e';
+            ctx.stroke();
+            
+            // Inner highlight for 3D effect
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, w.radius, w.startAngle, w.endAngle);
+            ctx.lineWidth = w.width - 4;
+            ctx.strokeStyle = '#6d4c41';
+            ctx.stroke();
+        } else if (w.type === 'radial') {
+            // RADIAL BLOCKING WALLS
+            const x1 = centerX + Math.cos(w.angle) * w.innerR;
+            const y1 = centerY + Math.sin(w.angle) * w.innerR;
+            const x2 = centerX + Math.cos(w.angle) * w.outerR;
+            const y2 = centerY + Math.sin(w.angle) * w.outerR;
+            
+            // Main wall line
+            ctx.lineWidth = w.width;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = '#4e342e';
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+            
+            // Highlight
+            ctx.beginPath();
+            ctx.lineWidth = w.width - 4;
+            ctx.strokeStyle = '#6d4c41';
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+        }
     });
 
     ctx.shadowBlur = 0;
@@ -574,7 +774,8 @@ function drawBalls() {
 function updateTimer() {
     if(!gameState.playing) return;
     const elapsed = Date.now() - gameState.startTime;
-    document.getElementById('timerBadge').innerText = formatTime(elapsed);
+    gameState.timeStr = formatTime(elapsed);
+    // Updated in checkWin() to show ball progress
 }
 
 function formatTime(ms) {
