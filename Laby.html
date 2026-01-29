@@ -207,26 +207,33 @@ function generateLevel() {
     walls = [];
     const step = maxRadius / (CONFIG.RINGS + 1);
 
-    // Create a proper maze pattern using a systematic approach
-    // Gap pattern: Each ring has one gap positioned strategically
+    // Create a randomized maze pattern for variety
     const gapPattern = [];
     
-    // Generate ring gaps in a spiral pattern for visual coherence
+    // Generate ring gaps with random rotation and size variation
+    // This makes each game different
+    const spiralTwists = Math.random() * 3 + 1; // Random number of rotations (1-4)
+    const startingGapAngle = Math.random() * PI2; // Random starting position
+    
     for (let i = 0; i < CONFIG.RINGS; i++) {
-        // Progressively rotate the gap position as we go inward
-        // This creates a nice spiral effect and forces navigation
+        // Random rotation each ring for variety
         const baseAngle = (i / CONFIG.RINGS) * PI2;
-        const rotationFactor = (i / CONFIG.RINGS) * PI2 * 2; // 2 full rotations
-        const gapAngle = baseAngle + rotationFactor;
+        const rotationFactor = (i / CONFIG.RINGS) * PI2 * spiralTwists; // Variable rotations
+        const randomOffset = (Math.random() - 0.5) * 0.4; // Random jitter
+        const gapAngle = startingGapAngle + baseAngle + rotationFactor + randomOffset;
+        
+        // Variable gap sizes for variety (but still navigable)
+        const gapSizeDeg = 30 + Math.random() * 20; // 30-50 degrees
+        const gapSizeRad = (gapSizeDeg * Math.PI) / 180;
         
         gapPattern.push({
             ringIndex: i + 1,
             gapAngle: gapAngle,
-            gapSize: (35 * Math.PI) / 180 // Consistent gap size: 35 degrees
+            gapSize: gapSizeRad
         });
     }
 
-    // 1. CONCENTRIC RINGS (with consistent gaps)
+    // 1. CONCENTRIC RINGS (with randomized gaps)
     for (let i = 1; i <= CONFIG.RINGS; i++) {
         const r = i * step;
         const gapInfo = gapPattern[i - 1];
@@ -248,26 +255,30 @@ function generateLevel() {
     }
 
     // 2. RADIAL BLOCKING WALLS (Dead ends between rings)
-    // Creates a proper maze structure that blocks direct paths
+    // Randomized for variety
     for (let i = 1; i < CONFIG.RINGS; i++) {
         const innerR = i * step;
         const outerR = (i + 1) * step;
-        const midR = (innerR + outerR) / 2;
 
-        // Add 2-3 radial walls per ring gap, positioned to create dead ends
-        const barrierCount = 2 + (i % 2); // Varies between 2 and 3
+        // Random number of barriers (2-4 per ring)
+        const barrierCount = 2 + Math.floor(Math.random() * 3);
         
         for (let b = 0; b < barrierCount; b++) {
-            // Position barriers away from the ring gaps to create proper obstacles
-            const barrierAngle = gapPattern[i-1].gapAngle + gapPattern[i-1].gapSize + (b * PI2 / (barrierCount + 1)) + (PI2 / 8);
+            // Randomize barrier positions to avoid repeating patterns
+            const randomAngle = Math.random() * PI2;
+            // Position away from current ring's gap
+            const distFromGap = Math.abs(randomAngle - gapPattern[i-1].gapAngle);
             
-            walls.push({
-                type: 'radial',
-                angle: barrierAngle,
-                innerR: innerR,
-                outerR: outerR,
-                width: CONFIG.WALL_WIDTH
-            });
+            // Only place barrier if it's far enough from the gap
+            if (distFromGap > gapPattern[i-1].gapSize * 1.5) {
+                walls.push({
+                    type: 'radial',
+                    angle: randomAngle,
+                    innerR: innerR,
+                    outerR: outerR,
+                    width: CONFIG.WALL_WIDTH
+                });
+            }
         }
     }
 
@@ -614,8 +625,9 @@ function checkCapCollision(b, r, angle) {
 }
 
 function checkWin() {
-    // Goal Zone - the center green area
-    const goalR = maxRadius / (CONFIG.RINGS + 2);
+    // Goal Zone - the center green area (much larger for easier access)
+    // Using RINGS - 1 instead of RINGS + 2 makes it significantly larger
+    const goalR = maxRadius / (CONFIG.RINGS - 0.5);
     let count = 0;
     
     balls.forEach(b => {
@@ -670,9 +682,10 @@ function drawBoard() {
     ctx.fillStyle = grad;
     ctx.fillRect(0,0,width,height);
     
-    // Goal Hole
+    // Goal Hole (larger for easier access)
+    const goalRadius = maxRadius / (CONFIG.RINGS - 0.5);
     ctx.beginPath();
-    ctx.arc(centerX, centerY, maxRadius / (CONFIG.RINGS + 2), 0, PI2);
+    ctx.arc(centerX, centerY, goalRadius, 0, PI2);
     ctx.fillStyle = '#1b5e20';
     ctx.fill();
     ctx.strokeStyle = 'rgba(0,0,0,0.5)';
