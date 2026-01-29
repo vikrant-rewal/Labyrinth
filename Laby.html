@@ -135,13 +135,13 @@ const CONFIG = {
     BALL_COUNT: 4,          
     WALL_WIDTH: 14,         // Thickness of walls (pixels)
     BALL_RADIUS: 8,         // Radius of ball (pixels)
-    FRICTION: 0.95,         // Velocity damping per frame (lower = more slide)
-    ELASTICITY: 0.15,       // Bounciness on wall hit (very low to reduce jitter)
+    FRICTION: 0.92,         // Velocity damping per frame (higher friction = less slide, smoother)
+    ELASTICITY: 0.05,       // Bounciness on wall hit (very low to prevent jitter)
     TILT_SENSITIVITY: 0.015, // Very low sensitivity to avoid overshooting
-    SUB_STEPS: 6,           // Physics steps per frame for collision detection
-    INPUT_SMOOTHING: 0.6,   // Accelerometer smoothing (higher = less jittery, more responsive)
-    MAX_VELOCITY: 4.5,      // Cap velocity to prevent overshoots
-    POSITIONAL_CORRECTION: 0.8 // How aggressively to correct penetrations
+    SUB_STEPS: 8,           // Physics steps per frame for collision detection (more accurate)
+    INPUT_SMOOTHING: 0.7,   // Accelerometer smoothing (higher = less jittery)
+    MAX_VELOCITY: 3.5,      // Cap velocity to prevent overshoots
+    POSITIONAL_CORRECTION: 0.9 // How aggressively to correct penetrations
 };
 
 // --- SYSTEM GLOBALS ---
@@ -223,7 +223,10 @@ function generateLevel() {
         const gapAngle = startingGapAngle + baseAngle + rotationFactor + randomOffset;
         
         // Variable gap sizes for variety (but still navigable)
-        const gapSizeDeg = 30 + Math.random() * 20; // 30-50 degrees
+        // Larger gaps for inner rings (easier to enter center), smaller for outer rings (more challenge)
+        const ringProgress = i / CONFIG.RINGS; // 0 for outer, 1 for inner
+        const baseSizeDeg = 50 + ringProgress * 30; // 50-80 degrees (50 outer, 80 inner)
+        const gapSizeDeg = baseSizeDeg + (Math.random() - 0.5) * 15; // Add some variance
         const gapSizeRad = (gapSizeDeg * Math.PI) / 180;
         
         gapPattern.push({
@@ -383,6 +386,13 @@ function updatePhysics() {
             // 2e. Solve Collisions & Constraints
             solveCollisions(b);
         });
+
+        // 2f. Ball-to-Ball Collisions (prevents overlapping and stacking)
+        for (let i = 0; i < balls.length; i++) {
+            for (let j = i + 1; j < balls.length; j++) {
+                solveBallCollision(balls[i], balls[j]);
+            }
+        }
     }
 
     // 3. Win Condition Check
@@ -398,26 +408,27 @@ function solveCollisions(b) {
     const halfWall = CONFIG.WALL_WIDTH / 2;
     const ballR = b.radius;
 
-    // 1. BOUNDARY ENFORCEMENT - Keep balls from leaving the board
+    // 1. BOUNDARY ENFORCEMENT - Keep balls from leaving the board (works in any orientation)
     const dx = b.x - centerX;
     const dy = b.y - centerY;
     const distFromCenter = Math.sqrt(dx * dx + dy * dy);
-    const boundaryRadius = maxRadius * 0.95;
+    const boundaryRadius = maxRadius * 0.92;
     
     if (distFromCenter > boundaryRadius - ballR) {
-        // Push ball back inside
+        // Push ball back inside more aggressively - prevents escape when vertical
         const angle = Math.atan2(dy, dx);
-        const correctedDist = boundaryRadius - ballR;
+        const correctedDist = boundaryRadius - ballR - 2; // Extra safety margin
         b.x = centerX + Math.cos(angle) * correctedDist;
         b.y = centerY + Math.sin(angle) * correctedDist;
         
-        // Kill outward velocity
+        // Kill outward velocity completely
         const nx = Math.cos(angle);
         const ny = Math.sin(angle);
         const velDot = b.vx * nx + b.vy * ny;
         if (velDot > 0) {
-            b.vx -= velDot * nx;
-            b.vy -= velDot * ny;
+            // Remove ALL outward velocity (not partial)
+            b.vx -= velDot * nx * 1.3;
+            b.vy -= velDot * ny * 1.3;
         }
     }
 
@@ -476,11 +487,12 @@ function collideWithArcWall(b, w, halfWall) {
             b.x += nx * correction * correctionDir;
             b.y += ny * correction * correctionDir;
 
-            // Dampen velocity
+            // Dampen velocity with very low bounce to reduce jitter
             const velocityDot = b.vx * nx + b.vy * ny;
             if ((velocityDot > 0 && correctionDir > 0) || (velocityDot < 0 && correctionDir < 0)) {
-                b.vx -= velocityDot * nx * (1 - CONFIG.ELASTICITY);
-                b.vy -= velocityDot * ny * (1 - CONFIG.ELASTICITY);
+                const bounce = 1 - CONFIG.ELASTICITY;
+                b.vx -= velocityDot * nx * bounce * 0.85; // Extra damping factor
+                b.vy -= velocityDot * ny * bounce * 0.85;
             }
         }
     } else {
@@ -538,10 +550,57 @@ function collideWithRadialWall(b, w, halfWall) {
         // Dampen velocity in the direction of the wall normal
         const velDot = b.vx * nx + b.vy * ny;
         if (velDot * sideSign < 0) {
-            // Moving into wall
-            b.vx -= velDot * nx * (1 - CONFIG.ELASTICITY);
-            b.vy -= velDot * ny * (1 - CONFIG.ELASTICITY);
+            // Moving into wall - use stronger damping to reduce bounce and jitter
+            const bounce = 1 - CONFIG.ELASTICITY;
+            b.vx -= velDot * nx * bounce * 0.85; // Extra damping factor
+            b.vy -= velDot * ny * bounce * 0.85;
         }
+    }
+}
+
+function solveBallCollision(b1, b2) {
+    /**
+     * Handle ball-to-ball collision
+     * Prevents overlapping and keeps all 4 balls visible and separated
+     */
+    const dx = b2.x - b1.x;
+    const dy = b2.y - b1.y;
+    const distSq = dx * dx + dy * dy;
+    const minDist = b1.radius + b2.radius;
+    const minDistSq = minDist * minDist;
+    
+    // If balls are not touching, skip
+    if (distSq > minDistSq || distSq < 0.01) return;
+    
+    const dist = Math.sqrt(distSq);
+    const nx = dx / dist;  // Normal vector from b1 to b2
+    const ny = dy / dist;
+    
+    // Separate overlapping balls
+    const penetration = minDist - dist;
+    const separationAmount = penetration / 2 + 0.5; // Extra margin to prevent re-overlap
+    
+    b1.x -= nx * separationAmount;
+    b1.y -= ny * separationAmount;
+    b2.x += nx * separationAmount;
+    b2.y += ny * separationAmount;
+    
+    // Calculate relative velocity
+    const dvx = b2.vx - b1.vx;
+    const dvy = b2.vy - b1.vy;
+    
+    // Relative velocity along collision normal
+    const dvn = dvx * nx + dvy * ny;
+    
+    // Only resolve if balls are moving towards each other
+    if (dvn < 0) {
+        // Elastic collision with equal mass
+        const impulse = -dvn; // For equal mass, equal and opposite impulse
+        
+        b1.vx -= impulse * nx * 0.5;
+        b1.vy -= impulse * ny * 0.5;
+        b2.vx += impulse * nx * 0.5;
+        b2.vy += impulse * ny * 0.5;
     }
 }
 
