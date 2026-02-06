@@ -111,6 +111,7 @@
         <h1>Labyrinth</h1>
         <p>Guide all 3 steel balls through the maze to the center goal.<br>Tilt your device or use arrow keys.</p>
         <button id="btnStart">Play & Enable Motion</button>
+        <p id="motionStatus" style="margin-top:1rem; font-size:0.9rem; color:#bca490;"></p>
     </div>
 
     <div id="winScreen" class="overlay hidden">
@@ -142,6 +143,8 @@ let width, height, centerX, centerY, maxRadius;
 let gameState = { playing: false, won: false, startTime: 0, timeStr: "00:00" };
 let tilt = { x: 0, y: 0 };
 let calibration = { beta: 0, gamma: 0, ready: false };
+let motionDetected = false;
+let motionHintTimeout = null;
 let balls = [];
 let walls = [];
 let goalRadius, ringWidth, sectorAngle;
@@ -159,6 +162,7 @@ function init() {
         }
     });
     window.addEventListener('deviceorientation', handleOrientation);
+    window.addEventListener('devicemotion', () => { motionDetected = true; }, { passive: true });
     
     window.addEventListener('keydown', e => {
         if(['ArrowLeft','a','A'].includes(e.key)) keys.left = true;
@@ -337,15 +341,27 @@ function generateMaze() {
 function startGame() {
     document.getElementById('startScreen').classList.add('hidden');
     document.getElementById('winScreen').classList.add('hidden');
+    updateMotionStatus('');
     resize();
     generateMaze();
     gameState = { playing: true, won: false, startTime: Date.now(), timeStr: "00:00" };
     tilt = { x: 0, y: 0 };
     calibration = { beta: 0, gamma: 0, ready: false };
+    motionDetected = false;
+    if (motionHintTimeout) {
+        clearTimeout(motionHintTimeout);
+    }
+    motionHintTimeout = setTimeout(() => {
+        if (!motionDetected) {
+            updateMotionStatus('Motion not detected. On Android, allow motion sensors and open over HTTPS.');
+        }
+    }, 1200);
 }
 
 function handleOrientation(e) {
     if (!gameState.playing) return;
+    motionDetected = true;
+    updateMotionStatus('');
     const rawBeta = e.beta ?? 0;
     const rawGamma = e.gamma ?? 0;
     if (!calibration.ready) {
@@ -778,6 +794,9 @@ function formatTime(ms) {
 }
 
 function requestPermissions() {
+    if (!window.isSecureContext) {
+        updateMotionStatus('Motion sensors require HTTPS on Android. Use https:// or localhost.');
+    }
     if (typeof DeviceOrientationEvent !== 'undefined' && 
         typeof DeviceOrientationEvent.requestPermission === 'function') {
         DeviceOrientationEvent.requestPermission()
@@ -785,6 +804,13 @@ function requestPermissions() {
             .catch(() => startGame());
     } else {
         startGame();
+    }
+}
+
+function updateMotionStatus(message) {
+    const statusEl = document.getElementById('motionStatus');
+    if (statusEl) {
+        statusEl.textContent = message;
     }
 }
 
