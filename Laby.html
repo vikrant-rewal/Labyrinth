@@ -123,15 +123,15 @@
 
 <script>
 const CONFIG = {
-    RINGS: 8,
+    RINGS: 7,
     SECTORS: 12,
     BALL_COUNT: 3,
-    WALL_WIDTH: 5,
-    BALL_RADIUS: 7,
-    FRICTION: 0.988,
-    TILT_SENSITIVITY: 0.18,
-    MAX_VELOCITY: 2.5,
-    SUB_STEPS: 16
+    WALL_WIDTH: 4,
+    BALL_RADIUS: 6,
+    FRICTION: 0.992,
+    TILT_SENSITIVITY: 0.28,
+    MAX_VELOCITY: 3.8,
+    SUB_STEPS: 12
 };
 
 const canvas = document.getElementById('gameCanvas');
@@ -182,8 +182,8 @@ function resize() {
     width = height = size;
     canvas.width = canvas.height = size;
     centerX = centerY = size / 2;
-    maxRadius = size * 0.47;
-    goalRadius = maxRadius * 0.14;
+    maxRadius = size * 0.48;
+    goalRadius = maxRadius * 0.12;
     ringWidth = (maxRadius - goalRadius) / CONFIG.RINGS;
     sectorAngle = PI2 / CONFIG.SECTORS;
 }
@@ -297,8 +297,8 @@ function generateMaze() {
                 walls.push({
                     type: 'arc',
                     radius: innerR,
-                    startAngle: startAngle + 0.04,
-                    endAngle: endAngle - 0.04
+                    startAngle: startAngle + 0.06,
+                    endAngle: endAngle - 0.06
                 });
             }
             
@@ -307,8 +307,8 @@ function generateMaze() {
                 walls.push({
                     type: 'radial',
                     angle: endAngle,
-                    innerR: innerR + 2,
-                    outerR: outerR - 2
+                    innerR: innerR + 1,
+                    outerR: outerR - 1
                 });
             }
         }
@@ -392,16 +392,21 @@ function updatePhysics() {
         balls.forEach(b => {
             b.vx += gx / CONFIG.SUB_STEPS;
             b.vy += gy / CONFIG.SUB_STEPS;
-            
+
             const speed = Math.hypot(b.vx, b.vy);
             if (speed > CONFIG.MAX_VELOCITY) {
                 b.vx = (b.vx / speed) * CONFIG.MAX_VELOCITY;
                 b.vy = (b.vy / speed) * CONFIG.MAX_VELOCITY;
             }
-            
+
             b.vx *= CONFIG.FRICTION;
             b.vy *= CONFIG.FRICTION;
-            
+
+            if (speed < 0.02 && (Math.abs(inputX) + Math.abs(inputY)) > 0.02) {
+                b.vx += gx * 0.5;
+                b.vy += gy * 0.5;
+            }
+
             b.x += b.vx / CONFIG.SUB_STEPS;
             b.y += b.vy / CONFIG.SUB_STEPS;
         });
