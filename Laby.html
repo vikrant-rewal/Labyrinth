@@ -275,7 +275,7 @@ function generateMaze() {
     
     // Open multiple paths to goal from innermost ring (ring 0)
     // This ensures all balls can reach the center
-    const exitCount = 3;
+    const exitCount = 1;
     const usedSectors = new Set();
     for (let i = 0; i < exitCount; i++) {
         let exitSector;
@@ -298,11 +298,12 @@ function generateMaze() {
             
             // Inner arc wall
             if (cell.innerWall) {
+                const arcPad = r === 0 ? 0.1 : 0.06;
                 walls.push({
                     type: 'arc',
                     radius: innerR,
-                    startAngle: startAngle + 0.06,
-                    endAngle: endAngle - 0.06
+                    startAngle: startAngle + arcPad,
+                    endAngle: endAngle - arcPad
                 });
             }
             
@@ -333,7 +334,8 @@ function generateMaze() {
             y: centerY + Math.sin(spawnAngle) * spawnR,
             vx: 0, vy: 0,
             r: CONFIG.BALL_RADIUS,
-            inGoal: false
+            inGoal: false,
+            locked: false
         });
     }
 }
@@ -406,6 +408,7 @@ function updatePhysics() {
     
     for (let step = 0; step < CONFIG.SUB_STEPS; step++) {
         balls.forEach(b => {
+            if (b.locked) return;
             b.vx += gx / CONFIG.SUB_STEPS;
             b.vy += gy / CONFIG.SUB_STEPS;
 
@@ -438,6 +441,7 @@ function updatePhysics() {
 }
 
 function resolveWallCollisions(b) {
+    if (b.locked) return;
     const hw = CONFIG.WALL_WIDTH / 2;
     
     walls.forEach(w => {
@@ -590,6 +594,9 @@ function resolveBallCollisions() {
         for (let j = i + 1; j < balls.length; j++) {
             const b1 = balls[i];
             const b2 = balls[j];
+            if (b1.locked && b2.locked) {
+                continue;
+            }
             
             const dx = b2.x - b1.x;
             const dy = b2.y - b1.y;
@@ -601,10 +608,14 @@ function resolveBallCollisions() {
                 const ny = dy / dist;
                 const overlap = (minDist - dist) / 2 + 1;
                 
-                b1.x -= nx * overlap;
-                b1.y -= ny * overlap;
-                b2.x += nx * overlap;
-                b2.y += ny * overlap;
+                if (!b1.locked) {
+                    b1.x -= nx * overlap;
+                    b1.y -= ny * overlap;
+                }
+                if (!b2.locked) {
+                    b2.x += nx * overlap;
+                    b2.y += ny * overlap;
+                }
                 
                 const dvx = b2.vx - b1.vx;
                 const dvy = b2.vy - b1.vy;
@@ -637,11 +648,22 @@ function checkWin() {
     let count = 0;
     balls.forEach(b => {
         const d = Math.hypot(b.x - centerX, b.y - centerY);
-        if (d < goalRadius * 0.85) {
+        if (d < goalRadius * 0.8) {
             count++;
             b.inGoal = true;
+            if (!b.locked && d < goalRadius * 0.65) {
+                b.locked = true;
+                b.vx = 0;
+                b.vy = 0;
+                b.x = centerX;
+                b.y = centerY;
+            } else if (!b.locked) {
+                b.vx *= 0.6;
+                b.vy *= 0.6;
+            }
         } else {
             b.inGoal = false;
+            b.locked = false;
         }
     });
     
