@@ -110,6 +110,10 @@
     <div id="startScreen" class="overlay">
         <h1>Labyrinth</h1>
         <p>Guide all 3 steel balls through the maze to the center goal.<br>Tilt your device or use arrow keys.</p>
+        <label style="display:flex; gap:0.6rem; align-items:center; margin:0.5rem 0 0; font-size:0.9rem; color:#d2b48c;">
+            <input type="checkbox" id="toggleLockGoal" checked>
+            Lock balls in goal (easier)
+        </label>
         <button id="btnStart">Play & Enable Motion</button>
         <p id="motionStatus" style="margin-top:1rem; font-size:0.9rem; color:#bca490;"></p>
     </div>
@@ -145,6 +149,7 @@ let tilt = { x: 0, y: 0 };
 let calibration = { beta: 0, gamma: 0, ready: false };
 let motionDetected = false;
 let motionHintTimeout = null;
+let lockGoalEnabled = true;
 let balls = [];
 let walls = [];
 let goalRadius, ringWidth, sectorAngle;
@@ -344,6 +349,7 @@ function startGame() {
     document.getElementById('startScreen').classList.add('hidden');
     document.getElementById('winScreen').classList.add('hidden');
     updateMotionStatus('');
+    lockGoalEnabled = document.getElementById('toggleLockGoal')?.checked ?? true;
     resize();
     generateMaze();
     gameState = { playing: true, won: false, startTime: Date.now(), timeStr: "00:00" };
@@ -651,13 +657,13 @@ function checkWin() {
         if (d < goalRadius * 0.8) {
             count++;
             b.inGoal = true;
-            if (!b.locked && d < goalRadius * 0.65) {
+            if (lockGoalEnabled && !b.locked && d < goalRadius * 0.65) {
                 b.locked = true;
                 b.vx = 0;
                 b.vy = 0;
                 b.x = centerX;
                 b.y = centerY;
-            } else if (!b.locked) {
+            } else if (!b.locked && lockGoalEnabled) {
                 b.vx *= 0.6;
                 b.vy *= 0.6;
             }
