@@ -111,8 +111,8 @@
         <h1>Labyrinth</h1>
         <p>Guide all 3 steel balls through the maze to the center goal.<br>Tilt your device or use arrow keys.</p>
         <label style="display:flex; gap:0.6rem; align-items:center; margin:0.5rem 0 0; font-size:0.9rem; color:#d2b48c;">
-            <input type="checkbox" id="toggleLockGoal" checked>
-            Lock balls in goal (easier)
+            <input type="checkbox" id="toggleLockGoal">
+            Lock balls in goal (easier mode)
         </label>
         <button id="btnStart">Play & Enable Motion</button>
         <p id="motionStatus" style="margin-top:1rem; font-size:0.9rem; color:#bca490;"></p>
@@ -136,7 +136,7 @@ const CONFIG = {
     FRICTION: 0.992,
     TILT_SENSITIVITY: 0.28,
     MAX_VELOCITY: 3.8,
-    SUB_STEPS: 12
+    SUB_STEPS: 16
 };
 
 const canvas = document.getElementById('gameCanvas');
@@ -149,7 +149,7 @@ let tilt = { x: 0, y: 0 };
 let calibration = { beta: 0, gamma: 0, ready: false };
 let motionDetected = false;
 let motionHintTimeout = null;
-let lockGoalEnabled = true;
+let lockGoalEnabled = false;
 let balls = [];
 let walls = [];
 let goalRadius, ringWidth, sectorAngle;
@@ -303,7 +303,7 @@ function generateMaze() {
             
             // Inner arc wall
             if (cell.innerWall) {
-                const arcPad = r === 0 ? 0.1 : 0.06;
+                const arcPad = r === 0 ? 0.08 : 0.06;
                 walls.push({
                     type: 'arc',
                     radius: innerR,
@@ -349,7 +349,7 @@ function startGame() {
     document.getElementById('startScreen').classList.add('hidden');
     document.getElementById('winScreen').classList.add('hidden');
     updateMotionStatus('');
-    lockGoalEnabled = document.getElementById('toggleLockGoal')?.checked ?? true;
+    lockGoalEnabled = document.getElementById('toggleLockGoal')?.checked ?? false;
     resize();
     generateMaze();
     gameState = { playing: true, won: false, startTime: Date.now(), timeStr: "00:00" };
@@ -438,6 +438,9 @@ function updatePhysics() {
         
         // Wall collisions
         balls.forEach(b => resolveWallCollisions(b));
+
+        // Light assist near goal to avoid edge-sticking on the innermost ring
+        balls.forEach(b => applyGoalAssist(b));
         
         // Ball-to-ball collisions
         resolveBallCollisions();
@@ -595,6 +598,21 @@ function collideBoundary(b, radius, hw) {
     }
 }
 
+function applyGoalAssist(b) {
+    if (b.locked) return;
+    const dx = centerX - b.x;
+    const dy = centerY - b.y;
+    const d = Math.hypot(dx, dy);
+    const assistStart = goalRadius + b.r * 1.6;
+    if (d < assistStart && d > goalRadius * 0.7) {
+        const nx = dx / d;
+        const ny = dy / d;
+        const strength = ((assistStart - d) / assistStart) * 0.045;
+        b.vx += nx * strength;
+        b.vy += ny * strength;
+    }
+}
+
 function resolveBallCollisions() {
     for (let i = 0; i < balls.length; i++) {
         for (let j = i + 1; j < balls.length; j++) {
@@ -628,10 +646,14 @@ function resolveBallCollisions() {
                 const dvn = dvx * nx + dvy * ny;
                 
                 if (dvn < 0) {
-                    b1.vx += dvn * nx * 0.5;
-                    b1.vy += dvn * ny * 0.5;
-                    b2.vx -= dvn * nx * 0.5;
-                    b2.vy -= dvn * ny * 0.5;
+                    if (!b1.locked) {
+                        b1.vx += dvn * nx * 0.5;
+                        b1.vy += dvn * ny * 0.5;
+                    }
+                    if (!b2.locked) {
+                        b2.vx -= dvn * nx * 0.5;
+                        b2.vy -= dvn * ny * 0.5;
+                    }
                 }
             }
         }
@@ -669,6 +691,10 @@ function checkWin() {
             }
         } else {
             b.inGoal = false;
+            b.locked = false;
+        }
+
+        if (!lockGoalEnabled) {
             b.locked = false;
         }
     });
