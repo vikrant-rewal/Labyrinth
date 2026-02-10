@@ -603,11 +603,14 @@ function applyGoalAssist(b) {
     const dx = centerX - b.x;
     const dy = centerY - b.y;
     const d = Math.hypot(dx, dy);
-    const assistStart = goalRadius + b.r * 2.2;
-    if (d < assistStart && d > goalRadius * 0.55) {
+
+    // Only assist while approaching from outside, so balls can still come back out naturally.
+    const assistStart = goalRadius + b.r * 2.1;
+    const assistEnd = goalRadius * 0.95;
+    if (d < assistStart && d > assistEnd) {
         const nx = dx / d;
         const ny = dy / d;
-        const strength = ((assistStart - d) / assistStart) * 0.09;
+        const strength = ((assistStart - d) / assistStart) * 0.045;
         b.vx += nx * strength;
         b.vy += ny * strength;
     }
