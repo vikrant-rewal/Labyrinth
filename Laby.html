@@ -133,9 +133,9 @@ const CONFIG = {
     BALL_COUNT: 3,
     WALL_WIDTH: 4,
     BALL_RADIUS: 6,
-    FRICTION: 0.992,
-    TILT_SENSITIVITY: 0.28,
-    MAX_VELOCITY: 3.8,
+    FRICTION: 0.996,
+    TILT_SENSITIVITY: 0.36,
+    MAX_VELOCITY: 5.2,
     SUB_STEPS: 16
 };
 
@@ -192,7 +192,7 @@ function resize() {
     canvas.width = canvas.height = size;
     centerX = centerY = size / 2;
     maxRadius = size * 0.48;
-    goalRadius = maxRadius * 0.16;
+    goalRadius = maxRadius * 0.18;
     ringWidth = (maxRadius - goalRadius) / CONFIG.RINGS;
     sectorAngle = PI2 / CONFIG.SECTORS;
 }
@@ -303,7 +303,7 @@ function generateMaze() {
             
             // Inner arc wall
             if (cell.innerWall) {
-                const arcPad = r === 0 ? 0.08 : 0.06;
+                const arcPad = r === 0 ? 0.03 : 0.06;
                 walls.push({
                     type: 'arc',
                     radius: innerR,
@@ -427,9 +427,9 @@ function updatePhysics() {
             b.vx *= CONFIG.FRICTION;
             b.vy *= CONFIG.FRICTION;
 
-            if (speed < 0.02 && (Math.abs(inputX) + Math.abs(inputY)) > 0.02) {
-                b.vx += gx * 0.5;
-                b.vy += gy * 0.5;
+            if (speed < 0.03 && (Math.abs(inputX) + Math.abs(inputY)) > 0.02) {
+                b.vx += gx * 0.75;
+                b.vy += gy * 0.75;
             }
 
             b.x += b.vx / CONFIG.SUB_STEPS;
@@ -603,11 +603,11 @@ function applyGoalAssist(b) {
     const dx = centerX - b.x;
     const dy = centerY - b.y;
     const d = Math.hypot(dx, dy);
-    const assistStart = goalRadius + b.r * 1.6;
-    if (d < assistStart && d > goalRadius * 0.7) {
+    const assistStart = goalRadius + b.r * 2.2;
+    if (d < assistStart && d > goalRadius * 0.55) {
         const nx = dx / d;
         const ny = dy / d;
-        const strength = ((assistStart - d) / assistStart) * 0.045;
+        const strength = ((assistStart - d) / assistStart) * 0.09;
         b.vx += nx * strength;
         b.vy += ny * strength;
     }
@@ -676,7 +676,7 @@ function checkWin() {
     let count = 0;
     balls.forEach(b => {
         const d = Math.hypot(b.x - centerX, b.y - centerY);
-        if (d < goalRadius * 0.8) {
+        if (d < goalRadius * 0.86) {
             count++;
             b.inGoal = true;
             if (lockGoalEnabled && !b.locked && d < goalRadius * 0.65) {
