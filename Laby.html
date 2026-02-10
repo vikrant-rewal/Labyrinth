@@ -303,7 +303,7 @@ function generateMaze() {
             
             // Inner arc wall
             if (cell.innerWall) {
-                const arcPad = r === 0 ? 0.03 : 0.06;
+                const arcPad = r === 0 ? 0.015 : 0.06;
                 walls.push({
                     type: 'arc',
                     radius: innerR,
