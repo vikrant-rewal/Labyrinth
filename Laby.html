@@ -104,13 +104,18 @@
     </style>
 </head>
 <body>
-    <div id="hud"><span id="timerBadge">00:00 | 0/4</span></div>
-    <div id="instructions">Arrow keys / WASD to tilt</div>
+    <div id="hud"><span id="timerBadge">00:00 | 0/3</span></div>
+    <div id="instructions">Tilt to roll • Tap to recalibrate • Arrow keys / WASD fallback</div>
     
     <div id="startScreen" class="overlay">
         <h1>Labyrinth</h1>
-        <p>Guide all 4 steel balls through the maze to the center goal.<br>Tilt your device or use arrow keys.</p>
-        <button id="btnStart">Play</button>
+        <p>Guide all 3 steel balls through the maze to the center goal.<br>Tilt your device or use arrow keys.</p>
+        <label style="display:flex; gap:0.6rem; align-items:center; margin:0.5rem 0 0; font-size:0.9rem; color:#d2b48c;">
+            <input type="checkbox" id="toggleLockGoal">
+            Lock balls in goal (easier mode)
+        </label>
+        <button id="btnStart">Play & Enable Motion</button>
+        <p id="motionStatus" style="margin-top:1rem; font-size:0.9rem; color:#bca490;"></p>
     </div>
 
     <div id="winScreen" class="overlay hidden">
@@ -123,14 +128,14 @@
 
 <script>
 const CONFIG = {
-    RINGS: 8,
+    RINGS: 7,
     SECTORS: 12,
-    BALL_COUNT: 4,
-    WALL_WIDTH: 5,
-    BALL_RADIUS: 7,
-    FRICTION: 0.988,
-    TILT_SENSITIVITY: 0.15,
-    MAX_VELOCITY: 2.5,
+    BALL_COUNT: 3,
+    WALL_WIDTH: 4,
+    BALL_RADIUS: 6,
+    FRICTION: 0.996,
+    TILT_SENSITIVITY: 0.36,
+    MAX_VELOCITY: 5.2,
     SUB_STEPS: 16
 };
 
@@ -141,6 +146,10 @@ const PI2 = Math.PI * 2;
 let width, height, centerX, centerY, maxRadius;
 let gameState = { playing: false, won: false, startTime: 0, timeStr: "00:00" };
 let tilt = { x: 0, y: 0 };
+let calibration = { beta: 0, gamma: 0, ready: false };
+let motionDetected = false;
+let motionHintTimeout = null;
+let lockGoalEnabled = false;
 let balls = [];
 let walls = [];
 let goalRadius, ringWidth, sectorAngle;
@@ -152,7 +161,13 @@ function init() {
     window.addEventListener('resize', resize);
     document.getElementById('btnStart').addEventListener('click', requestPermissions);
     document.getElementById('btnRestart').addEventListener('click', startGame);
+    canvas.addEventListener('pointerdown', () => {
+        if (gameState.playing) {
+            calibration.ready = false;
+        }
+    });
     window.addEventListener('deviceorientation', handleOrientation);
+    window.addEventListener('devicemotion', () => { motionDetected = true; }, { passive: true });
     
     window.addEventListener('keydown', e => {
         if(['ArrowLeft','a','A'].includes(e.key)) keys.left = true;
@@ -176,8 +191,8 @@ function resize() {
     width = height = size;
     canvas.width = canvas.height = size;
     centerX = centerY = size / 2;
-    maxRadius = size * 0.47;
-    goalRadius = maxRadius * 0.14;
+    maxRadius = size * 0.48;
+    goalRadius = maxRadius * 0.18;
     ringWidth = (maxRadius - goalRadius) / CONFIG.RINGS;
     sectorAngle = PI2 / CONFIG.SECTORS;
 }
@@ -263,18 +278,17 @@ function generateMaze() {
         }
     }
     
-    // Open multiple paths to goal from innermost ring (ring 0)
-    // This ensures all balls can reach the center
-    const exitCount = 3;
-    const usedSectors = new Set();
-    for (let i = 0; i < exitCount; i++) {
-        let exitSector;
-        do {
-            exitSector = Math.floor(Math.random() * CONFIG.SECTORS);
-        } while (usedSectors.has(exitSector));
-        usedSectors.add(exitSector);
-        grid[0][exitSector].innerWall = false;
-    }
+    // Create one wide center entrance (~2.5x wider than before) by opening
+    // the chosen sector and its two neighbors on ring 0.
+    const centerExitSector = Math.floor(Math.random() * CONFIG.SECTORS);
+    const wideExitSectors = [
+        (centerExitSector - 1 + CONFIG.SECTORS) % CONFIG.SECTORS,
+        centerExitSector,
+        (centerExitSector + 1) % CONFIG.SECTORS
+    ];
+    wideExitSectors.forEach(sector => {
+        grid[0][sector].innerWall = false;
+    });
     
     // Convert grid to walls
     for (let r = 0; r < CONFIG.RINGS; r++) {
@@ -288,11 +302,12 @@ function generateMaze() {
             
             // Inner arc wall
             if (cell.innerWall) {
+                const arcPad = r === 0 ? 0.015 : 0.06;
                 walls.push({
                     type: 'arc',
                     radius: innerR,
-                    startAngle: startAngle + 0.04,
-                    endAngle: endAngle - 0.04
+                    startAngle: startAngle + arcPad,
+                    endAngle: endAngle - arcPad
                 });
             }
             
@@ -301,8 +316,8 @@ function generateMaze() {
                 walls.push({
                     type: 'radial',
                     angle: endAngle,
-                    innerR: innerR + 2,
-                    outerR: outerR - 2
+                    innerR: innerR + 1,
+                    outerR: outerR - 1
                 });
             }
         }
@@ -311,7 +326,7 @@ function generateMaze() {
     // Outer boundary
     walls.push({ type: 'boundary', radius: maxRadius });
     
-    // Spawn 4 balls spread around the outer ring
+    // Spawn balls spread around the outer ring
     balls = [];
     for (let i = 0; i < CONFIG.BALL_COUNT; i++) {
         const sector = Math.floor((i / CONFIG.BALL_COUNT) * CONFIG.SECTORS + CONFIG.SECTORS / (CONFIG.BALL_COUNT * 2));
@@ -323,7 +338,8 @@ function generateMaze() {
             y: centerY + Math.sin(spawnAngle) * spawnR,
             vx: 0, vy: 0,
             r: CONFIG.BALL_RADIUS,
-            inGoal: false
+            inGoal: false,
+            locked: false
         });
     }
 }
@@ -331,18 +347,53 @@ function generateMaze() {
 function startGame() {
     document.getElementById('startScreen').classList.add('hidden');
     document.getElementById('winScreen').classList.add('hidden');
+    updateMotionStatus('');
+    lockGoalEnabled = document.getElementById('toggleLockGoal')?.checked ?? false;
     resize();
     generateMaze();
     gameState = { playing: true, won: false, startTime: Date.now(), timeStr: "00:00" };
     tilt = { x: 0, y: 0 };
+    calibration = { beta: 0, gamma: 0, ready: false };
+    motionDetected = false;
+    if (motionHintTimeout) {
+        clearTimeout(motionHintTimeout);
+    }
+    motionHintTimeout = setTimeout(() => {
+        if (!motionDetected) {
+            updateMotionStatus('Motion not detected. On Android, allow motion sensors and open over HTTPS.');
+        }
+    }, 1200);
 }
 
 function handleOrientation(e) {
     if (!gameState.playing) return;
-    const x = Math.max(-45, Math.min(45, e.gamma || 0));
-    const y = Math.max(-45, Math.min(45, e.beta || 0));
-    tilt.x = x / 45;
-    tilt.y = y / 45;
+    motionDetected = true;
+    updateMotionStatus('');
+    const rawBeta = e.beta ?? 0;
+    const rawGamma = e.gamma ?? 0;
+    if (!calibration.ready) {
+        calibration = { beta: rawBeta, gamma: rawGamma, ready: true };
+    }
+
+    const beta = rawBeta - calibration.beta;
+    const gamma = rawGamma - calibration.gamma;
+    const clampedGamma = Math.max(-45, Math.min(45, gamma));
+    const clampedBeta = Math.max(-45, Math.min(45, beta));
+
+    const orientation = screen.orientation?.angle ?? window.orientation ?? 0;
+    if (orientation === 90) {
+        tilt.x = clampedBeta / 45;
+        tilt.y = -clampedGamma / 45;
+    } else if (orientation === -90 || orientation === 270) {
+        tilt.x = -clampedBeta / 45;
+        tilt.y = clampedGamma / 45;
+    } else if (orientation === 180) {
+        tilt.x = -clampedGamma / 45;
+        tilt.y = -clampedBeta / 45;
+    } else {
+        tilt.x = clampedGamma / 45;
+        tilt.y = clampedBeta / 45;
+    }
 }
 
 function updatePhysics() {
@@ -362,24 +413,33 @@ function updatePhysics() {
     
     for (let step = 0; step < CONFIG.SUB_STEPS; step++) {
         balls.forEach(b => {
+            if (b.locked) return;
             b.vx += gx / CONFIG.SUB_STEPS;
             b.vy += gy / CONFIG.SUB_STEPS;
-            
+
             const speed = Math.hypot(b.vx, b.vy);
             if (speed > CONFIG.MAX_VELOCITY) {
                 b.vx = (b.vx / speed) * CONFIG.MAX_VELOCITY;
                 b.vy = (b.vy / speed) * CONFIG.MAX_VELOCITY;
             }
-            
+
             b.vx *= CONFIG.FRICTION;
             b.vy *= CONFIG.FRICTION;
-            
+
+            if (speed < 0.03 && (Math.abs(inputX) + Math.abs(inputY)) > 0.02) {
+                b.vx += gx * 0.75;
+                b.vy += gy * 0.75;
+            }
+
             b.x += b.vx / CONFIG.SUB_STEPS;
             b.y += b.vy / CONFIG.SUB_STEPS;
         });
         
         // Wall collisions
         balls.forEach(b => resolveWallCollisions(b));
+
+        // Light assist near goal to avoid edge-sticking on the innermost ring
+        balls.forEach(b => applyGoalAssist(b));
         
         // Ball-to-ball collisions
         resolveBallCollisions();
@@ -389,6 +449,7 @@ function updatePhysics() {
 }
 
 function resolveWallCollisions(b) {
+    if (b.locked) return;
     const hw = CONFIG.WALL_WIDTH / 2;
     
     walls.forEach(w => {
@@ -536,11 +597,32 @@ function collideBoundary(b, radius, hw) {
     }
 }
 
+function applyGoalAssist(b) {
+    if (b.locked) return;
+    const dx = centerX - b.x;
+    const dy = centerY - b.y;
+    const d = Math.hypot(dx, dy);
+
+    // Only assist while approaching from outside, so balls can still come back out naturally.
+    const assistStart = goalRadius + b.r * 2.1;
+    const assistEnd = goalRadius * 0.95;
+    if (d < assistStart && d > assistEnd) {
+        const nx = dx / d;
+        const ny = dy / d;
+        const strength = ((assistStart - d) / assistStart) * 0.045;
+        b.vx += nx * strength;
+        b.vy += ny * strength;
+    }
+}
+
 function resolveBallCollisions() {
     for (let i = 0; i < balls.length; i++) {
         for (let j = i + 1; j < balls.length; j++) {
             const b1 = balls[i];
             const b2 = balls[j];
+            if (b1.locked && b2.locked) {
+                continue;
+            }
             
             const dx = b2.x - b1.x;
             const dy = b2.y - b1.y;
@@ -552,20 +634,28 @@ function resolveBallCollisions() {
                 const ny = dy / dist;
                 const overlap = (minDist - dist) / 2 + 1;
                 
-                b1.x -= nx * overlap;
-                b1.y -= ny * overlap;
-                b2.x += nx * overlap;
-                b2.y += ny * overlap;
+                if (!b1.locked) {
+                    b1.x -= nx * overlap;
+                    b1.y -= ny * overlap;
+                }
+                if (!b2.locked) {
+                    b2.x += nx * overlap;
+                    b2.y += ny * overlap;
+                }
                 
                 const dvx = b2.vx - b1.vx;
                 const dvy = b2.vy - b1.vy;
                 const dvn = dvx * nx + dvy * ny;
                 
                 if (dvn < 0) {
-                    b1.vx += dvn * nx * 0.5;
-                    b1.vy += dvn * ny * 0.5;
-                    b2.vx -= dvn * nx * 0.5;
-                    b2.vy -= dvn * ny * 0.5;
+                    if (!b1.locked) {
+                        b1.vx += dvn * nx * 0.5;
+                        b1.vy += dvn * ny * 0.5;
+                    }
+                    if (!b2.locked) {
+                        b2.vx -= dvn * nx * 0.5;
+                        b2.vy -= dvn * ny * 0.5;
+                    }
                 }
             }
         }
@@ -588,11 +678,26 @@ function checkWin() {
     let count = 0;
     balls.forEach(b => {
         const d = Math.hypot(b.x - centerX, b.y - centerY);
-        if (d < goalRadius * 0.9) {
+        if (d < goalRadius * 0.86) {
             count++;
             b.inGoal = true;
+            if (lockGoalEnabled && !b.locked && d < goalRadius * 0.65) {
+                b.locked = true;
+                b.vx = 0;
+                b.vy = 0;
+                b.x = centerX;
+                b.y = centerY;
+            } else if (!b.locked && lockGoalEnabled) {
+                b.vx *= 0.6;
+                b.vy *= 0.6;
+            }
         } else {
             b.inGoal = false;
+            b.locked = false;
+        }
+
+        if (!lockGoalEnabled) {
+            b.locked = false;
         }
     });
     
@@ -745,6 +850,9 @@ function formatTime(ms) {
 }
 
 function requestPermissions() {
+    if (!window.isSecureContext) {
+        updateMotionStatus('Motion sensors require HTTPS on Android. Use https:// or localhost.');
+    }
     if (typeof DeviceOrientationEvent !== 'undefined' && 
         typeof DeviceOrientationEvent.requestPermission === 'function') {
         DeviceOrientationEvent.requestPermission()
@@ -752,6 +860,13 @@ function requestPermissions() {
             .catch(() => startGame());
     } else {
         startGame();
+    }
+}
+
+function updateMotionStatus(message) {
+    const statusEl = document.getElementById('motionStatus');
+    if (statusEl) {
+        statusEl.textContent = message;
     }
 }
 
