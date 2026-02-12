@@ -278,15 +278,20 @@ function generateMaze() {
         }
     }
     
-    // Create one wide center entrance (~2.5x wider than before) by opening
-    // the chosen sector and its two neighbors on ring 0.
-    const centerExitSector = Math.floor(Math.random() * CONFIG.SECTORS);
-    const wideExitSectors = [
-        (centerExitSector - 1 + CONFIG.SECTORS) % CONFIG.SECTORS,
-        centerExitSector,
-        (centerExitSector + 1) % CONFIG.SECTORS
+    // Guarantee at least one clean route from outer ring to the goal.
+    // We carve a radial corridor by opening every ring transition in one sector.
+    const guaranteedSector = Math.floor(Math.random() * CONFIG.SECTORS);
+    for (let r = 0; r < CONFIG.RINGS; r++) {
+        grid[r][guaranteedSector].innerWall = false;
+    }
+
+    // Slightly wide center entrance (reduced from previous too-large opening).
+    const side = Math.random() < 0.5 ? -1 : 1;
+    const centerExitSectors = [
+        guaranteedSector,
+        (guaranteedSector + side + CONFIG.SECTORS) % CONFIG.SECTORS
     ];
-    wideExitSectors.forEach(sector => {
+    centerExitSectors.forEach(sector => {
         grid[0][sector].innerWall = false;
     });
     
@@ -302,7 +307,7 @@ function generateMaze() {
             
             // Inner arc wall
             if (cell.innerWall) {
-                const arcPad = r === 0 ? 0.015 : 0.06;
+                const arcPad = r === 0 ? 0.022 : 0.045;
                 walls.push({
                     type: 'arc',
                     radius: innerR,
