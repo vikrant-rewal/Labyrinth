@@ -278,18 +278,17 @@ function generateMaze() {
         }
     }
     
-    // Open multiple paths to goal from innermost ring (ring 0)
-    // This ensures all balls can reach the center
-    const exitCount = 1;
-    const usedSectors = new Set();
-    for (let i = 0; i < exitCount; i++) {
-        let exitSector;
-        do {
-            exitSector = Math.floor(Math.random() * CONFIG.SECTORS);
-        } while (usedSectors.has(exitSector));
-        usedSectors.add(exitSector);
-        grid[0][exitSector].innerWall = false;
-    }
+    // Create one wide center entrance (~2.5x wider than before) by opening
+    // the chosen sector and its two neighbors on ring 0.
+    const centerExitSector = Math.floor(Math.random() * CONFIG.SECTORS);
+    const wideExitSectors = [
+        (centerExitSector - 1 + CONFIG.SECTORS) % CONFIG.SECTORS,
+        centerExitSector,
+        (centerExitSector + 1) % CONFIG.SECTORS
+    ];
+    wideExitSectors.forEach(sector => {
+        grid[0][sector].innerWall = false;
+    });
     
     // Convert grid to walls
     for (let r = 0; r < CONFIG.RINGS; r++) {
